@@ -59,6 +59,18 @@ uint16_t slip_rubbish, slip_twopackets, slip_overflow, slip_ip_drop;
 #define SLIP_STATISTICS(statement) statement
 #endif
 
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+
+#endif
+
+#define DEBUG 0
+#if DEBUG
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#else
+#define PRINTF(...) do {} while (0)
+#endif
+
 /* Must be at least one byte larger than UIP_BUFSIZE! */
 #define RX_BUFSIZE (UIP_BUFSIZE - UIP_LLH_LEN + 16)
 
@@ -163,6 +175,7 @@ rxbuf_init(void)
 static uint16_t
 slip_poll_handler(uint8_t *outbuf, uint16_t blen)
 {
+#if !(ENABLE_CBC_LINK_SECURITY & SEC_CLIENT)	/* SECURITY CLIENT */
   /* This is a hack and won't work across buffer edge! */
   if(rxbuf[begin] == 'C') {
     int i;
@@ -206,6 +219,7 @@ slip_poll_handler(uint8_t *outbuf, uint16_t blen)
   }
 #endif /* SLIP_CONF_ANSWER_MAC_REQUEST */
 
+#endif /* SECURITY CLIENT */
   /*
    * Interrupt can not change begin but may change pkt_end.
    * If pkt_end != begin it will not change again.
@@ -264,6 +278,11 @@ PROCESS_THREAD(slip_process, ev, data)
     /* Move packet from rxbuf to buffer provided by uIP. */
     uip_len = slip_poll_handler(&uip_buf[UIP_LLH_LEN],
 				UIP_BUFSIZE - UIP_LLH_LEN);
+
+    PRINTF("slip: buf ");
+    uint8_t i;
+    for(i=0; i<uip_len; i++) PRINTF("%02x ",uip_buf[i]);
+    PRINTF("\n");
 #if !UIP_CONF_IPV6
     if(uip_len == 4 && strncmp((char*)&uip_buf[UIP_LLH_LEN], "?IPA", 4) == 0) {
       char buf[8];
@@ -306,9 +325,12 @@ PROCESS_THREAD(slip_process, ev, data)
 #ifdef SLIP_CONF_TCPIP_INPUT
       SLIP_CONF_TCPIP_INPUT();
 #else
+#if !(ENABLE_CBC_LINK_SECURITY & SEC_CLIENT)	/* SECURITY CLIENT */
       tcpip_input();
+#endif /* SECURITY CLIENT */
 #endif
     }
+
 #endif /* UIP_CONF_IPV6 */
   }
 

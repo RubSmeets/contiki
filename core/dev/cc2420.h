@@ -45,6 +45,7 @@
 #include "dev/spi.h"
 #include "dev/radio.h"
 #include "dev/cc2420_const.h"
+#include "dev/xmem.h"
 
 int cc2420_init(void);
 
@@ -71,6 +72,22 @@ void cc2420_set_txpower(uint8_t power);
 int cc2420_get_txpower(void);
 #define CC2420_TXPOWER_MAX  31
 #define CC2420_TXPOWER_MIN   0
+
+#if ENABLE_CBC_LINK_SECURITY
+#define MIC_LEN 8			 /**< Length of the CCM MIC in bytes */
+#define CC2420RAM_SEC_LEN 16 /**< Length of security data in CC2420 RAM registers */
+#endif
+
+#if ENABLE_CCM_APPLICATION
+#define APP_MIC_LEN 		8
+#define MSG_NONCE_SIZE		2	/* Size in bytes */
+#define NONCE_SIZE			3	/* Size of the nonce+nonce counter */
+
+//typedef uint16_t msgnonce_type_t;
+
+int cc2420_encrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *msg_cntr, uint8_t *nonce_cntr, uint8_t *data_len, unsigned short adata_len);
+int cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr, uint8_t *src_nonce_cntr, uint8_t *data_len, unsigned short adata_len);
+#endif
 
 /**
  * Interrupt function, called from the simple-cc2420-arch driver.
@@ -163,6 +180,18 @@ void cc2420_set_cca_threshold(int value);
     CC2420_SPI_DISABLE();                                               \
   } while(0)
 
+#define CC2420_WRITE_RXFIFO_BUF(buffer,count)                                \
+  do {                                                                  \
+    uint8_t i;                                                          \
+    CC2420_SPI_ENABLE();                                                \
+    SPI_WRITE_FAST(CC2420_RXFIFO);                                           \
+    for(i = 0; i < (count); i++) {                                      \
+      SPI_WRITE_FAST(((uint8_t *)(buffer))[i]);                              \
+    }                                                                   \
+    SPI_WAITFORTx_ENDED();                                              \
+    CC2420_SPI_DISABLE();                                               \
+  } while(0)
+
 /* Write to RAM in the CC2420 */
 #define CC2420_WRITE_RAM(buffer,adr,count)                 \
   do {                                                       \
@@ -177,6 +206,21 @@ void cc2420_set_cca_threshold(int value);
     CC2420_SPI_DISABLE();                                    \
   } while(0)
 
+/* Write to RAM reverse in the CC2420 (security related) */
+#define CC2420_WRITE_RAM_REV(buffer,adr,count)               \
+  do {                                                       \
+    uint8_t i;                                               \
+    CC2420_SPI_ENABLE();                                     \
+    SPI_WRITE_FAST(0x80 | (adr & 0x7f));                     \
+    SPI_WRITE_FAST((adr >> 1) & 0xc0);                       \
+    for(i = (count); i > 0; i--) {                           \
+      SPI_WRITE_FAST(((uint8_t*)(buffer))[i - 1]);           \
+    }                                                        \
+    SPI_WAITFORTx_ENDED();                                   \
+    CC2420_SPI_DISABLE();                                    \
+  } while(0)
+
+
 /* Read from RAM in the CC2420 */
 #define CC2420_READ_RAM(buffer,adr,count)                    \
   do {                                                       \
@@ -187,6 +231,20 @@ void cc2420_set_cca_threshold(int value);
     SPI_RXBUF;                                               \
     for(i = 0; i < (count); i++) {                           \
       SPI_READ(((uint8_t*)(buffer))[i]);                     \
+    }                                                        \
+    CC2420_SPI_DISABLE();                                    \
+  } while(0)
+
+/* Read from RAM reverse in the CC2420 */
+#define CC2420_READ_RAM_REV(buffer,adr,count)                \
+  do {                                                       \
+    uint8_t i;                                               \
+    CC2420_SPI_ENABLE();                                     \
+    SPI_WRITE(0x80 | ((adr) & 0x7f));                        \
+    SPI_WRITE((((adr) >> 1) & 0xc0) | 0x20);                 \
+    SPI_RXBUF;                                               \
+    for(i = (count); i > 0; i--) {                           \
+      SPI_READ(((uint8_t*)(buffer))[i - 1]);                 \
     }                                                        \
     CC2420_SPI_DISABLE();                                    \
   } while(0)

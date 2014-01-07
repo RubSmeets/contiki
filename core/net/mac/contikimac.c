@@ -934,7 +934,7 @@ input_packet(void)
 #ifdef NETSTACK_DECRYPT
   NETSTACK_DECRYPT();
 #endif /* NETSTACK_DECRYPT */
-
+  PRINTF("contikimac: Total_len %d\n", packetbuf_totlen());
   if(packetbuf_totlen() > 0 && NETSTACK_FRAMER.parse() >= 0) {
 
 #if WITH_CONTIKIMAC_HEADER

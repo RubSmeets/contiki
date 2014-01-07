@@ -84,12 +84,14 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG 0
-#if DEBUG
+#define DEBUG_SEC 0
+#if DEBUG_SEC
 #include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINTFSEC(...)
+#define PRINTF(...)
 #else
-#define PRINTF(...) do {} while (0)
+#define PRINTFSEC(...) do {} while (0)
+#define PRINTF(...)
 #endif
 
 #define DEBUG_LEDS DEBUG
@@ -144,6 +146,22 @@ static int cc2420_receiving_packet(void);
 static int pending_packet(void);
 static int cc2420_cca(void);
 /*static int detected_energy(void);*/
+
+#if ENABLE_CBC_LINK_SECURITY
+#define ACK_PACKET_SIZE 	3
+static uint8_t mic_len;
+inline void cc2420_initLinkLayerSec(void);
+#endif
+
+#if ENABLE_CCM_APPLICATION
+#define CC2420_SEC_TXKEYSEL_1 (1<<6)
+#define CC2420_SEC_RXKEYSEL_1 (1<<5)
+#define RX 1
+#define TX 0
+
+static void setAssociatedData(unsigned short RX_nTX, unsigned short hdrlen);
+static void setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *msg_ctr, uint8_t *p_nonce_ctr);
+#endif
 
 signed char cc2420_last_rssi;
 uint8_t cc2420_last_correlation;
@@ -333,9 +351,13 @@ cc2420_init(void)
   setreg(CC2420_IOCFG0, FIFOP_THR(127));
 
   /* Turn off "Security enable" (page 32). */
-  reg = getreg(CC2420_SECCTRL0);
-  reg &= ~RXFIFO_PROTECTION;
-  setreg(CC2420_SECCTRL0, reg);
+#if ENABLE_CBC_LINK_SECURITY
+    cc2420_initLinkLayerSec();
+#else
+    reg = getreg(CC2420_SECCTRL0);
+    reg &= ~RXFIFO_PROTECTION;
+    setreg(CC2420_SECCTRL0, reg);
+#endif
 
   cc2420_set_pan_addr(0xffff, 0x0000, NULL);
   cc2420_set_channel(CC2420_CONF_CHANNEL);
@@ -385,6 +407,11 @@ cc2420_transmit(unsigned short payload_len)
   strobe(CC2420_SRXON);
   BUSYWAIT_UNTIL(status() & BV(CC2420_RSSI_VALID), RTIMER_SECOND / 10);
   strobe(CC2420_STXONCCA);
+#if ENABLE_CBC_LINK_SECURITY
+  /* Wait until encryption complete */
+  BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND / 10);
+#endif
+
 #else /* WITH_SEND_CCA */
   strobe(CC2420_STXON);
 #endif /* WITH_SEND_CCA */
@@ -473,7 +500,15 @@ cc2420_prepare(const void *payload, unsigned short payload_len)
 #if CC2420_CONF_CHECKSUM
   checksum = crc16_data(payload, payload_len, 0);
 #endif /* CC2420_CONF_CHECKSUM */
+
+#if ENABLE_CBC_LINK_SECURITY
+  /* Extend total length with MIC and increment framecounter */
+  total_len = payload_len + mic_len + AUX_LEN; //8 Byte MIC
+  PRINTFSEC("Pay_len: %d, tot_len: %d\n", payload_len, total_len);
+#else
   total_len = payload_len + AUX_LEN;
+#endif
+
   CC2420_WRITE_FIFO_BUF(&total_len, 1);
   CC2420_WRITE_FIFO_BUF(payload, payload_len);
 #if CC2420_CONF_CHECKSUM
@@ -640,6 +675,7 @@ PROCESS_THREAD(cc2420_process, ev, data)
     packetbuf_clear();
     packetbuf_set_attr(PACKETBUF_ATTR_TIMESTAMP, last_packet_timestamp);
     len = cc2420_read(packetbuf_dataptr(), PACKETBUF_SIZE);
+    PRINTFSEC("cc2420: len after read %d", len);
     
     packetbuf_set_datalen(len);
     
@@ -654,11 +690,13 @@ cc2420_read(void *buf, unsigned short bufsize)
 {
   uint8_t footer[2];
   uint8_t len;
+  uint8_t *pbuf;
 #if CC2420_CONF_CHECKSUM
   uint16_t checksum;
 #endif /* CC2420_CONF_CHECKSUM */
 
   if(!CC2420_FIFOP_IS_1) {
+	PRINTFSEC("pin low\n");
     return 0;
   }
   /*  if(!pending) {
@@ -672,6 +710,19 @@ cc2420_read(void *buf, unsigned short bufsize)
   cc2420_packets_read++;
 
   getrxbyte(&len);
+  PRINTFSEC("len: %d\n", len);
+
+#if ENABLE_CBC_LINK_SECURITY
+  /*
+   * Check bufsize to know if we are waiting for ACK-packet
+   * these packets aren't encrypted and give errors when performing
+   * decryption.
+   */
+  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+	  strobe(CC2420_SRXDEC);
+	  BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
+  }
+#endif
 
   if(len > CC2420_MAX_PACKET_LEN) {
     /* Oops, we must be out of sync. */
@@ -695,7 +746,29 @@ cc2420_read(void *buf, unsigned short bufsize)
     return 0;
   }
 
+#if ENABLE_CBC_LINK_SECURITY
+  /*
+   * Check if we are receiving an ACK-packet. They don't have
+   * a MIC message appended.
+   */
+
   getrxdata(buf, len - AUX_LEN);
+  pbuf = buf;
+  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+	  if(pbuf[len-(AUX_LEN-1)] != 0x00)
+	  {
+		  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
+		  flushrx();
+		  RELEASE_LOCK();
+		  return 0;
+	  }
+	  PRINTF("cc2420: SUCCESS\n");
+  }
+
+#else
+  getrxdata(buf, len - AUX_LEN);
+#endif
+
 #if CC2420_CONF_CHECKSUM
   getrxdata(&checksum, CHECKSUM_LEN);
 #endif /* CC2420_CONF_CHECKSUM */
@@ -731,8 +804,10 @@ cc2420_read(void *buf, unsigned short bufsize)
       /* Clean up in case of FIFO overflow!  This happens for every
        * full length frame and is signaled by FIFOP = 1 and FIFO =
        * 0. */
+      PRINTFSEC("2\n");
       flushrx();
     } else {
+      PRINTF("Poll\n");
       /* Another packet has been received and needs attention. */
       process_poll(&cc2420_process);
     }
@@ -741,10 +816,23 @@ cc2420_read(void *buf, unsigned short bufsize)
   RELEASE_LOCK();
 
   if(len < AUX_LEN) {
+	PRINTFSEC("3\n");
     return 0;
   }
 
+#if ENABLE_CBC_LINK_SECURITY
+  /*
+   * ACK-packet doens't have MIC message appended. Therefore
+   * we don't need to subtract the mic-length from the total len.
+   */
+  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+	  return len - AUX_LEN - mic_len;
+  } else {
+	  return len - AUX_LEN;
+  }
+#else
   return len - AUX_LEN;
+#endif
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -874,3 +962,184 @@ cc2420_set_cca_threshold(int value)
   RELEASE_LOCK();
 }
 /*---------------------------------------------------------------------------*/
+#if ENABLE_CBC_LINK_SECURITY
+inline void
+cc2420_initLinkLayerSec(void)
+{
+	uint16_t reg;
+
+	/* Enable key material */
+	mic_len = MIC_LEN;
+
+	/* Set security control register 0 */
+	reg = getreg(CC2420_SECCTRL0);
+	/* Stand alone key 1, Use 8 bytes MIC, Use RX fifo protection */
+	reg |= CC2420_SECCTRL0_SAKEYSEL1 | (CC2420_SECCTRL0_SEC_M_IDX << 2) | CC2420_SECCTRL0_RXFIFO_PROTECTION;
+	/* Set TX keyselect to '0' */
+	reg &= ~(1<<6);
+	/* Set CBC-MAC Mode */
+	reg |= CC2420_SECCTRL0_CBC_MAC;
+
+	setreg(CC2420_SECCTRL0, reg);
+	PRINTFSEC("cc2420: SEC0 reg: %.2X\n", reg);
+
+	PRINTF("cc2420: Init CBC MAC complete\n");
+}
+#endif
+/*---------------------------------------------------------------------------*/
+#if ENABLE_CCM_APPLICATION
+/*---------------------------------------------------------------------------*/
+static void
+setAssociatedData(unsigned short RX_nTX, unsigned short hdrlen)
+{
+	/* SECCTRL1 must be set correctly to size of MAC HDR (21 + 5) for IEEE802.15.4-2003 */
+	uint16_t reg;
+	if(RX_nTX) 	reg = (((uint16_t)(hdrlen)) & 0x00ff);
+	else 		reg = ((((uint16_t)(hdrlen))<<8) & 0xff00);
+	setreg(CC2420_SECCTRL1, reg);
+	PRINTFSEC("cc2420: RX_nTX: %d, Associated data: %d, SEC1 reg: %.2X\n, ", RX_nTX, hdrlen, reg);
+}
+/*---------------------------------------------------------------------------*/
+static void
+setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *p_msg_ctr, uint8_t *p_nonce_ctr)
+{
+	uint8_t nonce[16];
+	//uint8_t ieee_addr_temp[8];
+
+	/* Set flags:
+	 *		CTR flag (0 0) -> reserved for future expansion
+	 *		CBC flag (0 1) -> 7-bit reserved, 6-bit Adata is 1 in my case (not everything is encrypted)
+	 *		L (1) 		   -> n+q=15 (n=13)(q=2) l=[q-1]3 | n is the nonce length (see standard)
+	 */
+
+	/* NOG MAKEN DAT JE OOK KAN ENCRYPTEREN ZONDER ADATA!!!!!!*/
+
+	nonce[0] =  0x00 | 0x01 | 0x08;
+	memcpy(&nonce[1], &p_address_nonce[8], 8);	/* Setting source address */
+	nonce[9] = 0xFF & (*p_msg_ctr>>24);			/* Setting frame counter */
+	nonce[10] = 0xFF & (*p_msg_ctr>>16);
+	nonce[11] = 0xFF & (*p_msg_ctr>>8);
+	nonce[12] = 0xFF & (*p_msg_ctr);
+	nonce[13] = *p_nonce_ctr;			/* Setting key sequence counter (incremented with every new key) */
+	nonce[14] = 0x00;					/* Setting MSB of Block counter to 0x00 to be complained with IEEE802.15.4 */
+	nonce[15] = 0x01;					/* (only set on initiation) */
+
+	uint8_t i;
+	PRINTFSEC("READ NONCE: "); for(i=0; i<16; i++) PRINTFSEC("%.2X ",nonce[i]); PRINTFSEC("\n");
+
+	/* Write Tx Nonce */
+	if(RX_nTX) 	CC2420_WRITE_RAM_REV(nonce, CC2420RAM_RXNONCE, 16);
+	else		CC2420_WRITE_RAM_REV(nonce, CC2420RAM_TXNONCE, 16);
+}
+/*---------------------------------------------------------------------------*/
+int
+cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr, uint8_t *src_nonce_cntr,
+				uint8_t *data_len, unsigned short adata_len)
+{
+	unsigned int stats;
+	uint8_t  tot_len;
+	uint16_t reg_old, reg;
+	uint32_t tmp_src_msg_cntr = 0;
+
+	/* Check if we are encrypting */
+	stats = status();
+	if(stats & BV(CC2420_ENC_BUSY)) return 0;
+
+	/* Set security control reg 0 */
+	reg_old = getreg(CC2420_SECCTRL0);
+	reg = (CC2420_SECCTRL0_SEC_M_IDX << 2) | CC2420_SECCTRL0_RXKEYSEL1 | CC2420_SECCTRL0_RXFIFO_PROTECTION | CC2420_SECCTRL0_CCM;
+	PRINTFSEC("cc2420: Reg 0: %.2x\n",reg);
+
+	/* Set associated data RX to 5 */
+	setAssociatedData(RX, adata_len);
+
+	/* Set Nonce Rx */
+	tmp_src_msg_cntr = (uint32_t)*src_msg_cntr;
+	setNonce(RX, address_nonce, &tmp_src_msg_cntr, src_nonce_cntr);
+
+	/* Flush the RXFIFO */
+	flushrx();
+
+	/* Set RXFIFO */
+	tot_len = *data_len + AUX_LEN;
+	CC2420_WRITE_RXFIFO_BUF(&tot_len, 1);
+	CC2420_WRITE_RXFIFO_BUF(data, *data_len);
+
+	setreg(CC2420_SECCTRL0, reg);
+
+	/* Decrypt FIFO buffer */
+	strobe(CC2420_SRXDEC);
+	BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
+
+	/* Read RXFIFO buffer */
+	getrxbyte(&tot_len);
+	getrxdata(data, *data_len);
+
+	/* Restore security control reg 0 */
+	setreg(CC2420_SECCTRL0, reg_old);
+	PRINTFSEC("cc2420: Reg 0 restore: %.2x\n",reg_old);
+
+	/* Restore security control reg 1 */
+	setAssociatedData(RX, 0);
+
+	/* Flush the RXFIFO */
+	flushrx();
+
+	return 1;
+}
+/*---------------------------------------------------------------------------*/
+int
+cc2420_encrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *msg_cntr, uint8_t *nonce_cntr,
+				uint8_t *data_len, unsigned short adata_len)
+{
+	unsigned int stats;
+	uint8_t  tot_len;
+	uint16_t reg_old, reg;
+	uint32_t tmp_msg_cntr = 0;
+
+	/* Check if we are transmitting or encrypting */
+	stats = status();
+	if((stats & BV(CC2420_ENC_BUSY)) || (stats & BV(CC2420_TX_ACTIVE))) return 0;
+
+	/* Set security control reg 0 */
+	reg_old = getreg(CC2420_SECCTRL0);
+	reg = (CC2420_SECCTRL0_SEC_M_IDX << 2) | CC2420_SECCTRL0_RXFIFO_PROTECTION | CC2420_SECCTRL0_TXKEYSEL1 | CC2420_SECCTRL0_CCM;
+	setreg(CC2420_SECCTRL0, reg);
+	PRINTFSEC("cc2420: Reg 0: %.2x\n",reg);
+
+	/* Set associated data TX to 5 */
+	setAssociatedData(TX, adata_len);
+
+	/* Set Nonce tx */
+	tmp_msg_cntr = (uint32_t)*msg_cntr;
+	setNonce(TX, address_nonce, &tmp_msg_cntr, nonce_cntr);
+
+	/* Flush the TXFIFO */
+	strobe(CC2420_SFLUSHTX);
+
+	/* Set TXFIFO */
+	tot_len = *data_len + APP_MIC_LEN + AUX_LEN;
+	CC2420_WRITE_FIFO_BUF(&tot_len, 1);
+	CC2420_WRITE_FIFO_BUF(data, *data_len);
+
+	/* Encrypt FIFO buffer */
+	strobe(CC2420_STXENC);
+	BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
+
+	/* Read TXFIFO buffer */
+	CC2420_READ_RAM(data, CC2420RAM_TXFIFO, tot_len-1);
+
+	/* Restore security control reg 0 */
+	setreg(CC2420_SECCTRL0, reg_old);
+	PRINTFSEC("cc2420: Reg 0 restore: %.2x\n",reg_old);
+
+	/* Restore security control reg 1 */
+	setAssociatedData(TX, 0);
+
+	/* Update data_len with current value */
+	*data_len = tot_len-AUX_LEN;
+
+	return 1;
+}
+/*---------------------------------------------------------------------------*/
+#endif

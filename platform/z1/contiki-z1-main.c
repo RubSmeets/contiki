@@ -47,6 +47,14 @@
 #include "dev/adxl345.h"
 #include "sys/clock.h"
 
+#if ENABLE_CCM_APPLICATION
+#include "symm-key-client-v1.h"
+#endif
+
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+#include "sec-arp-client.h"
+#endif
+
 #if WITH_UIP6
 #include "net/uip-ds6.h"
 #endif /* WITH_UIP6 */
@@ -402,6 +410,14 @@ main(int argc, char **argv)
 
   print_processes(autostart_processes);
   autostart_start(autostart_processes);
+
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT
+  keymanagement_init();
+#endif
+
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+  sec_arp_init();
+#endif
 
   /*
    * This is the scheduler loop.

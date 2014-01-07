@@ -102,7 +102,11 @@ create(void)
 
   /* Build the FCF. */
   params.fcf.frame_type = FRAME802154_DATAFRAME;
+#if ENABLE_CBC_LINK_SECURITY
+  params.fcf.security_enabled = 1;
+#else
   params.fcf.security_enabled = 0;
+#endif
   params.fcf.frame_pending = packetbuf_attr(PACKETBUF_ATTR_PENDING);
   if(rimeaddr_cmp(packetbuf_addr(PACKETBUF_ADDR_RECEIVER), &rimeaddr_null)) {
     params.fcf.ack_required = 0;

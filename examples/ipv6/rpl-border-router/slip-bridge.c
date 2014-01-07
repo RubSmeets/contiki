@@ -51,6 +51,14 @@
 
 void set_prefix_64(uip_ipaddr_t *);
 
+#if ENABLE_CBC_LINK_SECURITY
+void set_key(uint8_t *key);
+#endif
+
+#if ENABLE_CCM_APPLICATION & SEC_SERVER
+void send_comm_reply(uint8_t *msg);
+#endif
+
 static uip_ipaddr_t last_sender;
 /*---------------------------------------------------------------------------*/
 static void
@@ -87,6 +95,21 @@ slip_input_callback(void)
     }
     uip_len = 0;
   }
+#if ENABLE_CCM_APPLICATION & SEC_SERVER
+  else if (uip_buf[0] == '+') {
+	  uint8_t i;
+	  PRINTF("Got config message of type sec\n");
+	  if(uip_buf[1] == 'K') {
+		  PRINTF("key: ");
+		  for(i=0; i<16; i++) PRINTF("%02x ", uip_buf[2]);
+		  PRINTF("\n");
+		  set_key(&uip_buf[2]);
+	  } else if(uip_buf[1] == 'R') {
+		  PRINTF("Got comm reply\n");
+		  send_comm_reply(&uip_buf[2]);
+	  }
+  }
+#endif
   /* Save the last sender received over SLIP to avoid bouncing the
      packet back if no route is found */
   uip_ipaddr_copy(&last_sender, &UIP_IP_BUF->srcipaddr);
@@ -96,6 +119,7 @@ static void
 init(void)
 {
   slip_arch_init(BAUD2UBR(115200));
+  PRINTF("Starting slip process\n");
   process_start(&slip_process, NULL);
   slip_set_input_callback(slip_input_callback);
 }
