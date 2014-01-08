@@ -42,9 +42,9 @@
 
 #include "contiki-net.h"
 
-void keymanagement_init(void);
-short keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8_t *data_len, unsigned short adata_len, uip_ipaddr_t *toaddr, uint16_t toport);
-short keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint8_t *data_len, unsigned short adata_len);
+void __attribute__((__far__)) keymanagement_init(void);
+short __attribute__((__far__)) keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8_t *data_len, unsigned short adata_len, uip_ipaddr_t *toaddr, uint16_t toport);
+short __attribute__((__far__)) keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint8_t *data_len, unsigned short adata_len);
 
 //#define ENCRYPT_OK 			0
 //#define ENCRYPT_FAILED 		1

@@ -9,6 +9,7 @@
 #define SEC_DATA_H_
 
 #include "net/uip.h"
+#include "dev/cc2420.h"
 
 
 /* ------------------------------------- */
@@ -84,31 +85,28 @@ typedef uint8_t keyExNonce_type_t;
 /* ------------------------------------- */
 /* Functions used in key management      */
 /* ------------------------------------- */
-int  search_device_id(uip_ipaddr_t* curr_device_id, uint8_t search_offset);
-int  add_device_id(uip_ipaddr_t* curr_device_id);
-uint8_t find_index_for_request(keyfreshness_flags_type_t search_option);
-int  remove_least_active_device(void);
-void remove_sec_device(uint8_t index);
-void resetDeviceID_by_Index(uint8_t index);
-void reset_sec_data(uint8_t index);
-void update_nonce(uint8_t index);
-void copy_id_to_reserved(uint8_t index);
-void reset_failed_key_exchanges(void);
-void store_reserved_sec_data(void);
-uint8_t parse_comm_reply_message(uint8_t *data);
+void __attribute__((__far__)) set_session_key_of_index(int index);
+int  __attribute__((__far__)) search_device_id(uip_ipaddr_t* curr_device_id, uint8_t search_offset);
+int  __attribute__((__far__)) add_device_id(uip_ipaddr_t* curr_device_id);
+uint8_t __attribute__((__far__)) find_index_for_request(keyfreshness_flags_type_t search_option);
+int  __attribute__((__far__)) remove_least_active_device(void);
+void __attribute__((__far__)) remove_sec_device(uint8_t index);
+void __attribute__((__far__)) resetDeviceID_by_Index(uint8_t index);
+void __attribute__((__far__)) reset_sec_data(uint8_t index);
+void __attribute__((__far__)) update_nonce(uint8_t index);
+void __attribute__((__far__)) copy_id_to_reserved(uint8_t index);
+void __attribute__((__far__)) reset_failed_key_exchanges(void);
+void __attribute__((__far__)) store_reserved_sec_data(void);
 
-/* ------------------------------------- */
-/* Supporting functions				     */
-/* ------------------------------------- */
-//void increment_request_nonce(void);
-//void increment_verify_nonce(void);
-//void get_decrement_verify_nonce(uint8_t *temp_verify_nonce);
 /* ------------------------------------- */
 /* Can be moved to UTILS			     */
 /* ------------------------------------- */
-void set16(uint8_t *buffer, int pos, uint16_t value);
-uint16_t get16(uint8_t *buffer, int pos);
+void __attribute__((__far__)) set16(uint8_t *buffer, int pos, uint16_t value);
+uint16_t __attribute__((__far__)) get16(uint8_t *buffer, int pos);
 
-extern  struct device_sec_data devices[MAX_DEVICES];
+/* Global variables */
+extern struct device_sec_data devices[MAX_DEVICES];
+extern uint8_t amount_of_known_devices;
+extern uint8_t update_key_exchange_nonce;
 
 #endif /* SEC_DATA_H_ */

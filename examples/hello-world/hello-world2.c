@@ -9,6 +9,7 @@
 #include "dev/button-sensor.h"
 #include "net/uip.h"
 #include "net/uip-ds6.h"
+#include "sys/clock.h"
 
 #include <string.h>
 
@@ -20,12 +21,27 @@
 #define PRINTF(...)
 #endif
 
+#define MAX_DATA 5
+
+//struct data {
+//  uip_ipaddr_t  	remote_device_id;
+//  uint16_t			msg_cntr;
+//  uint8_t			nonce_cntr;
+//  uint16_t 			remote_msg_cntr;
+//  uint8_t 	 		remote_nonce_cntr;
+//  uint8_t			key_freshness;
+//  uint8_t			session_key[16];
+//  unsigned long		time_last_activity;
+//};
+
+//static struct data *list_data;
+
 void __attribute__((__far__)) incrCounter(uint8_t* pointer);
 void __attribute__((__far__)) passValueFromNear(uint8_t cnt);
 short __attribute__((__far__)) decrCounter(uint8_t* pointer);
 
 static uint8_t pcounter[10];
-static uint8_t __attribute__((__far__)) pcounter2;
+static uint8_t pcounter2;
 const uint8_t __attribute__((__far__)) values[100] =
 {0,1,2,3,4,5,6,7,8,9,
  0,1,2,3,4,5,6,7,8,9,
@@ -62,6 +78,8 @@ PROCESS_THREAD(far_near_process, ev, data)
 
 	short status = 0;
 
+	//list_data = (struct data*)calloc(MAX_DATA,sizeof(struct data));
+
 	etimer_set(&et, CLOCK_SECOND*seconds);  // Set the timer
 
     while(1)
@@ -83,10 +101,11 @@ PROCESS_THREAD(far_near_process, ev, data)
 			status = decrCounter(pcounter);
 			PRINTF("status: %d\n", status);
 			passValueFromNear(count);
+			//PRINTF("%ld", (list_data+count)->time_last_activity);
 			count++;
 		}
 	}
-
+    //free(list_data);
 	PROCESS_END();
 }
 
@@ -128,4 +147,6 @@ void __attribute__((__far__)) passValueFromNear(uint8_t cnt)
 	}
 
 	PRINTF("IP: "); for(i=0; i<15; i++) PRINTF("%02x", curr_ip.u8[i]); PRINTF("\n");
+
+	//&(list_data+cnt)->time_last_activity = clock_seconds();
 }

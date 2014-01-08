@@ -7,13 +7,12 @@
 
 #include "symm-key-client-v1.h"
 #include "net/sec_data.h"
-#include "dev/cc2420.h"
 #include "net/packetbuf.h"
 #include "sys/clock.h"
 
 #include <string.h>
 
-#if ENABLE_CCM_APPLICATION & SEC_CLIENT
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT | 1
 
 #define DEBUG_SEC 0
 #if DEBUG_SEC
@@ -57,13 +56,16 @@
 #define S_KEY_EXCHANGE_FAILED	7
 #define S_KEY_EXCHANGE_IDLE 	8
 
-/* Global variables */
-struct device_sec_data devices[MAX_DEVICES];
+/* General variables */
 static short state;
 static short key_exchange_state;
 static uint8_t send_tries;
 static struct uip_udp_conn *sec_conn;
-static uint8_t amount_of_known_devices;
+
+/* Global variables */
+struct device_sec_data devices[MAX_DEVICES];
+uint8_t amount_of_known_devices;
+uint8_t update_key_exchange_nonce;
 
 /* Buffer variables */
 static uint16_t keypacketbuf_aligned[(MAX_MESSAGE_SIZE) / 2 + 1];
@@ -77,18 +79,16 @@ static keyExNonce_type_t request_nonce_cntr;
 static keyExNonce_type_t verify_nonce_cntr;
 static uint8_t remote_request_nonce[3];
 static uint8_t remote_verify_nonce[3];
-static uint8_t update_key_exchange_nonce;
 
 /* Functions used in key management layer */
-static void set_session_key_of_index(int index);
-static uint8_t key_exchange_protocol(void);
-static void send_key_exchange_packet(void);
-static void init_reply_message(void);
-static void comm_request_message(void);
-static void verify_request_message(void);
-static void verify_reply_message(void);
-static short parse_packet(uint8_t *data, uint16_t len);
-
+uint8_t __attribute__((__far__)) key_exchange_protocol(void);
+void __attribute__((__far__)) send_key_exchange_packet(void);
+void __attribute__((__far__)) init_reply_message(void);
+void __attribute__((__far__)) comm_request_message(void);
+void __attribute__((__far__)) verify_request_message(void);
+void __attribute__((__far__)) verify_reply_message(void);
+short __attribute__((__far__)) parse_packet(uint8_t *data, uint16_t len);
+uint8_t __attribute__((__far__)) parse_comm_reply_message(uint8_t *data);
 
 /*---------------------------------------------------------------------------*/
 PROCESS(keymanagement_process, "key management");
@@ -97,7 +97,9 @@ PROCESS(keymanagement_process, "key management");
 /*-----------------------------------------------------------------------------------*/
 /* Supporting functions																 */
 /*-----------------------------------------------------------------------------------*/
-void increment_request_nonce(void) {
+void __attribute__((__far__))
+increment_request_nonce(void)
+{
 	if(request_nonce == 0xffff) {
 		request_nonce_cntr++;
 		request_nonce = 0;
@@ -108,7 +110,9 @@ void increment_request_nonce(void) {
 	}
 }
 /*-----------------------------------------------------------------------------------*/
-void increment_verify_nonce(void) {
+void __attribute__((__far__))
+increment_verify_nonce(void)
+{
 	if(verify_nonce == 0xffff) {
 		verify_nonce_cntr++;
 		verify_nonce = 0;
@@ -119,7 +123,9 @@ void increment_verify_nonce(void) {
 	}
 }
 /*-----------------------------------------------------------------------------------*/
-void get_decrement_verify_nonce(uint8_t *temp_verify_nonce) {
+void __attribute__((__far__))
+get_decrement_verify_nonce(uint8_t *temp_verify_nonce)
+{
 	uint16_t temp_nonce = verify_nonce;
 
 	if(temp_nonce == 0) {
@@ -139,7 +145,7 @@ void get_decrement_verify_nonce(uint8_t *temp_verify_nonce) {
  * Initialization function																GETEST!
  */
 /*-----------------------------------------------------------------------------------*/
-void
+void __attribute__((__far__))
 keymanagement_init(void)
 {
 	/* State to idle */
@@ -175,7 +181,7 @@ keymanagement_init(void)
  * @return encrypt-flags																NIET GETEST!
  */
 /*-----------------------------------------------------------------------------------*/
-short
+short __attribute__((__far__))
 keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8_t *data_len,
 								unsigned short adata_len, uip_ipaddr_t *toaddr, uint16_t toport)
 {
@@ -274,7 +280,7 @@ keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8
  * @return decrypt-flags																NIET GETEST!
  */
 /*-----------------------------------------------------------------------------------*/
-short
+short __attribute__((__far__))
 keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint8_t *data_len, unsigned short adata_len)
 {
 	uint8_t src_nonce_cntr;
@@ -403,26 +409,13 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 
 /*-----------------------------------------------------------------------------------*/
 /**
- * Get the security data from flash for device at a given index (index)						NIET GETEST!
- */
-/*-----------------------------------------------------------------------------------*/
-static void
-set_session_key_of_index(int index)
-{
-	uint8_t i;
-	PRINTFDEBUG("key: "); for(i=0;i<16;i++) PRINTFDEBUG("%02x ", devices[index].session_key[i]); PRINTFDEBUG("\n");
-	CC2420_WRITE_RAM_REV(&devices[index].session_key[0], CC2420RAM_KEY1, SEC_KEY_SIZE);
-}
-
-/*-----------------------------------------------------------------------------------*/
-/**
  * key_exchange_protocol is the main callback (protocol) function that decides if the
  * protocol should continue or stop.
  *
  * @return stop/continue																	NIET AF!
  */
 /*-----------------------------------------------------------------------------------*/
-static uint8_t
+uint8_t __attribute__((__far__))
 key_exchange_protocol(void)
 {
 	/* Check if there is data to be processed */
@@ -485,7 +478,7 @@ key_exchange_protocol(void)
  * to the current state.
  */
 /*-----------------------------------------------------------------------------------*/
-static void
+void __attribute__((__far__))
 send_key_exchange_packet(void)
 {
 	keypacketbuf[0] = key_exchange_state;
@@ -545,7 +538,7 @@ send_key_exchange_packet(void)
  *	Set keypacketbuf with init reply message							 					NIET AF!
  */
 /*-----------------------------------------------------------------------------------*/
-static void
+void __attribute__((__far__))
 init_reply_message(void) {
 	set16(keypacketbuf, 1, request_nonce);
 	keypacketbuf[3] = request_nonce_cntr;
@@ -557,7 +550,7 @@ init_reply_message(void) {
  *	Set keypacketbuf with communication request message										NIET GETEST
  */
 /*-----------------------------------------------------------------------------------*/
-static void
+void __attribute__((__far__))
 comm_request_message(void) {
 	uip_ipaddr_t curr_ip;
 
@@ -582,7 +575,7 @@ comm_request_message(void) {
  *	Set keypacketbuf with verify request message											NIET GETEST
  */
 /*-----------------------------------------------------------------------------------*/
-static void
+void __attribute__((__far__))
 verify_request_message(void)
 {
 	/* Copy verify nonce */
@@ -599,7 +592,7 @@ verify_request_message(void)
  *	Set keypacketbuf with verify reply message											NIET GETEST
  */
 /*-----------------------------------------------------------------------------------*/
-static void
+void __attribute__((__far__))
 verify_reply_message(void)
 {
 	uint16_t temp_rverify_nonce;
@@ -635,7 +628,7 @@ verify_reply_message(void)
  * 																							NIET AF!
  */
 /*-----------------------------------------------------------------------------------*/
-static short
+short __attribute__((__far__))
 parse_packet(uint8_t *data, uint16_t len)
 {
 	uint8_t temp_data_len = len & 0xff;
@@ -753,6 +746,57 @@ parse_packet(uint8_t *data, uint16_t len)
 		default:
 			break;
 	}
+
+	return 1;
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ *	Help function to parse the content of communication reply message.
+ *
+ *	@param pointer to data
+ *	@param pointer to current device id
+ *	@return failed/successful
+ */
+/*-----------------------------------------------------------------------------------*/
+#define ID_OFFSET				23
+#define SESSIONKEY_OFFSET		7
+#define REQUEST_NONCE_OFFSET	4
+
+uint8_t __attribute__((__far__))
+parse_comm_reply_message(uint8_t *data) {
+	uint8_t temp_request_nonce[3];
+	uip_ipaddr_t curr_ip;
+
+	/* Get own ip address */
+	uip_ds6_select_src(&curr_ip, &devices[RESERVED_INDEX].remote_device_id);
+
+	/* Assemble request nonce */
+	set16(temp_request_nonce, 0, request_nonce);
+	temp_request_nonce[2] = request_nonce_cntr;
+
+	/* Check request nonce */
+	if(memcmp(&data[REQUEST_NONCE_OFFSET], &temp_request_nonce[0], 3) != 0) {
+		/* Doesn't belong with current request - replay message */
+		PRINTF("key: wrong req_nonce\n");
+		return 0;
+	}
+
+	/* Check device id */
+	if(memcmp(&data[ID_OFFSET], &curr_ip.u8[0], DEVICE_ID_SIZE) != 0) {
+		/* Wrong id */
+		PRINTF("key: wrong id\n");
+		return 0;
+	}
+
+	/* Store security data */
+	reset_sec_data(RESERVED_INDEX);
+	memcpy(&devices[RESERVED_INDEX].session_key[0], &data[SESSIONKEY_OFFSET], SEC_KEY_SIZE);
+
+	/* Increment request nonce */
+	increment_request_nonce();
+
+	PRINTF("key: Parse ok\n");
 
 	return 1;
 }
