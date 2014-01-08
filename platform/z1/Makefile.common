@@ -49,8 +49,8 @@ else
 
   ifneq (,$(findstring 4.7.,$(MSPGCC_VERSION)))
   # 20 bits flags for compilation (supported from mspgcc 4.7.0)
-    #CFLAGS += -mmemory-model=large -mcode-region=near -mdata-region=near -msr20 -mc20 -md20
-    #LDFLAGS += -mmemory-model=large -mcode-region=near -mdata-region=near -msr20 -mc20 -md20
+    CFLAGS += -mmemory-model=large -mcode-region=near -mdata-region=near -msr20 -mc20 -md20
+    LDFLAGS += -mmemory-model=large -mcode-region=near -mdata-region=near -msr20 -mc20 -md20
   endif
 endif
 
