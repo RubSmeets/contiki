@@ -32,7 +32,7 @@
 
 /* Register offsets */
 #define SEC_KEY_OFFSET			16
-#define EDGE_ROUTER_INDEX		0
+#define CENTRAL_ENTITY_INDEX	0
 #define RESERVED_INDEX			1
 
 /* Timing defines */
@@ -82,13 +82,18 @@ static uint8_t remote_verify_nonce[3];
 
 /* Functions used in key management layer */
 uint8_t __attribute__((__far__)) key_exchange_protocol(void);
-void __attribute__((__far__)) send_key_exchange_packet(void);
-void __attribute__((__far__)) init_reply_message(void);
-void __attribute__((__far__)) comm_request_message(void);
-void __attribute__((__far__)) verify_request_message(void);
-void __attribute__((__far__)) verify_reply_message(void);
-short __attribute__((__far__)) parse_packet(uint8_t *data, uint16_t len);
+static void send_key_exchange_packet(void);
+static void init_reply_message(void);
+static void comm_request_message(void);
+static void verify_request_message(void);
+static void verify_reply_message(void);
+static short parse_packet(uint8_t *data, uint16_t len);
 uint8_t __attribute__((__far__)) parse_comm_reply_message(uint8_t *data);
+
+static void store_reserved_sec_data(void);
+static int  add_device_id(uip_ipaddr_t* curr_device_id);
+static void reset_failed_key_exchanges(void);
+static void update_nonce(uint8_t index);
 
 /*---------------------------------------------------------------------------*/
 PROCESS(keymanagement_process, "key management");
@@ -97,7 +102,7 @@ PROCESS(keymanagement_process, "key management");
 /*-----------------------------------------------------------------------------------*/
 /* Supporting functions																 */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 increment_request_nonce(void)
 {
 	if(request_nonce == 0xffff) {
@@ -110,7 +115,7 @@ increment_request_nonce(void)
 	}
 }
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 increment_verify_nonce(void)
 {
 	if(verify_nonce == 0xffff) {
@@ -123,7 +128,7 @@ increment_verify_nonce(void)
 	}
 }
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 get_decrement_verify_nonce(uint8_t *temp_verify_nonce)
 {
 	uint16_t temp_nonce = verify_nonce;
@@ -340,6 +345,7 @@ keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint
  * Key management process																	NIET AF!
  */
 /*-----------------------------------------------------------------------------------*/
+__attribute__((__far__))
 PROCESS_THREAD(keymanagement_process, ev, data)
 {
 	static struct etimer periodic;
@@ -478,7 +484,7 @@ key_exchange_protocol(void)
  * to the current state.
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 send_key_exchange_packet(void)
 {
 	keypacketbuf[0] = key_exchange_state;
@@ -504,7 +510,7 @@ send_key_exchange_packet(void)
 			/* Create message */
 			comm_request_message();
 			/* Send packet to edge-router */
-			uip_udp_packet_sendto(sec_conn, keypacketbuf, tot_len, &devices[EDGE_ROUTER_INDEX].remote_device_id, UIP_HTONS(UDP_SERVER_SEC_PORT));
+			uip_udp_packet_sendto(sec_conn, keypacketbuf, tot_len, &devices[CENTRAL_ENTITY_INDEX].remote_device_id, UIP_HTONS(UDP_SERVER_SEC_PORT));
 			break;
 
 		case S_VERIFY_REQUEST: /* | Ek{verify nonce} | */
@@ -538,7 +544,7 @@ send_key_exchange_packet(void)
  *	Set keypacketbuf with init reply message							 					NIET AF!
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 init_reply_message(void) {
 	set16(keypacketbuf, 1, request_nonce);
 	keypacketbuf[3] = request_nonce_cntr;
@@ -550,12 +556,12 @@ init_reply_message(void) {
  *	Set keypacketbuf with communication request message										NIET GETEST
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 comm_request_message(void) {
 	uip_ipaddr_t curr_ip;
 
 	/* Get own ip address */
-	uip_ds6_select_src(&curr_ip, &devices[EDGE_ROUTER_INDEX].remote_device_id);
+	uip_ds6_select_src(&curr_ip, &devices[CENTRAL_ENTITY_INDEX].remote_device_id);
 
 	/* Copy own ID */
 	memcpy(&keypacketbuf[1], &curr_ip.u8[0], DEVICE_ID_SIZE);
@@ -575,7 +581,7 @@ comm_request_message(void) {
  *	Set keypacketbuf with verify request message											NIET GETEST
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 verify_request_message(void)
 {
 	/* Copy verify nonce */
@@ -592,7 +598,7 @@ verify_request_message(void)
  *	Set keypacketbuf with verify reply message											NIET GETEST
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 verify_reply_message(void)
 {
 	uint16_t temp_rverify_nonce;
@@ -628,7 +634,7 @@ verify_reply_message(void)
  * 																							NIET AF!
  */
 /*-----------------------------------------------------------------------------------*/
-short __attribute__((__far__))
+static short
 parse_packet(uint8_t *data, uint16_t len)
 {
 	uint8_t temp_data_len = len & 0xff;
@@ -651,7 +657,7 @@ parse_packet(uint8_t *data, uint16_t len)
 						remove_least_active_device();
 					}
 					memcpy(&devices[RESERVED_INDEX].remote_device_id.u8[0], &UIP_IP_BUF->srcipaddr.u8[0], DEVICE_ID_SIZE);
-				} else if(device_index == EDGE_ROUTER_INDEX) {
+				} else if(device_index == CENTRAL_ENTITY_INDEX) {
 					return 0;
 				} else {
 					copy_id_to_reserved((uint8_t)device_index);
@@ -799,6 +805,81 @@ parse_comm_reply_message(uint8_t *data) {
 	PRINTF("key: Parse ok\n");
 
 	return 1;
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ *	Store the temporary security data in a free spot if not found
+ */
+/*-----------------------------------------------------------------------------------*/
+static void
+store_reserved_sec_data(void)
+{
+	int index;
+
+	index = search_device_id(&devices[RESERVED_INDEX].remote_device_id,2);
+	if(index < 0) {
+		index = find_index_for_request(FREE_SPOT);
+	}
+
+	/* store security device data */
+	devices[index] = devices[RESERVED_INDEX];
+	devices[index].key_freshness = FRESH;
+
+	/* Reset RESERVED id */
+	memset(&devices[RESERVED_INDEX].remote_device_id.u8[0], 0, DEVICE_ID_SIZE);
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ * add the given device id to secured communication
+ */
+/*-----------------------------------------------------------------------------------*/
+static int
+add_device_id(uip_ipaddr_t* curr_device_id)
+{
+	int index = DEVICE_NOT_FOUND;
+
+	/* Make room for new device */
+	if(amount_of_known_devices == MAX_DEVICES) {
+		index = remove_least_active_device();
+	}
+
+	/* Add device to known devices */
+	index = find_index_for_request(FREE_SPOT);
+	memcpy(&devices[index].remote_device_id.u8[0], &curr_device_id->u8[0], DEVICE_ID_SIZE);
+	amount_of_known_devices++;
+
+	return index;
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ *	Reset the failed key-exchanges to expired
+ */
+/*-----------------------------------------------------------------------------------*/
+static void
+reset_failed_key_exchanges(void)
+{
+	uint8_t i;
+	for(i=2; i<MAX_DEVICES; i++) {
+		if(devices[i].key_freshness == FAILED) {
+			devices[i].key_freshness = EXPIRED;
+		}
+	}
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ * Update nonce writes the new nonce of devices[index] to flash memory
+ *
+ * @param index of device
+ */
+/*-----------------------------------------------------------------------------------*/
+static void
+update_nonce(uint8_t index)
+{
+	devices[index].key_freshness = FRESH;
 }
 
 #endif

@@ -87,16 +87,15 @@ typedef uint8_t keyExNonce_type_t;
 /* ------------------------------------- */
 void __attribute__((__far__)) set_session_key_of_index(int index);
 int  __attribute__((__far__)) search_device_id(uip_ipaddr_t* curr_device_id, uint8_t search_offset);
-int  __attribute__((__far__)) add_device_id(uip_ipaddr_t* curr_device_id);
+
 uint8_t __attribute__((__far__)) find_index_for_request(keyfreshness_flags_type_t search_option);
 int  __attribute__((__far__)) remove_least_active_device(void);
-void __attribute__((__far__)) remove_sec_device(uint8_t index);
+
 void __attribute__((__far__)) resetDeviceID_by_Index(uint8_t index);
 void __attribute__((__far__)) reset_sec_data(uint8_t index);
-void __attribute__((__far__)) update_nonce(uint8_t index);
+
 void __attribute__((__far__)) copy_id_to_reserved(uint8_t index);
-void __attribute__((__far__)) reset_failed_key_exchanges(void);
-void __attribute__((__far__)) store_reserved_sec_data(void);
+
 
 /* ------------------------------------- */
 /* Can be moved to UTILS			     */

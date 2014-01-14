@@ -17,6 +17,8 @@
 #define PRINTF(...)
 #endif
 
+/* Functions used in sec_data.c */
+static void remove_sec_device(uint8_t index);
 /*-----------------------------------------------------------------------------------*/
 
 
@@ -92,19 +94,6 @@ reset_sec_data(uint8_t index)
 
 /*-----------------------------------------------------------------------------------*/
 /**
- * Update nonce writes the new nonce of devices[index] to flash memory
- *
- * @param index of device
- */
-/*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
-update_nonce(uint8_t index)
-{
-	devices[index].key_freshness = FRESH;
-}
-
-/*-----------------------------------------------------------------------------------*/
-/**
  *	Copy the device id to the reserved spot for key-exchange
  *
  *	@param current device_index
@@ -114,22 +103,6 @@ void __attribute__((__far__))
 copy_id_to_reserved(uint8_t index)
 {
 	memcpy(&devices[RESERVED_INDEX].remote_device_id.u8[0], &devices[index].remote_device_id.u8[0], DEVICE_ID_SIZE);
-}
-
-/*-----------------------------------------------------------------------------------*/
-/**
- *	Reset the failed key-exchanges to expired
- */
-/*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
-reset_failed_key_exchanges(void)
-{
-	uint8_t i;
-	for(i=2; i<MAX_DEVICES; i++) {
-		if(devices[i].key_freshness == FAILED) {
-			devices[i].key_freshness = EXPIRED;
-		}
-	}
 }
 
 /*-----------------------------------------------------------------------------------*/
@@ -149,29 +122,6 @@ search_device_id(uip_ipaddr_t *curr_device_id, uint8_t search_offset)
 			break;
 		}
 	}
-	return index;
-}
-
-/*-----------------------------------------------------------------------------------*/
-/**
- * add the given device id to secured communication
- */
-/*-----------------------------------------------------------------------------------*/
-int __attribute__((__far__))
-add_device_id(uip_ipaddr_t* curr_device_id)
-{
-	int index = DEVICE_NOT_FOUND;
-
-	/* Make room for new device */
-	if(amount_of_known_devices == MAX_DEVICES) {
-		index = remove_least_active_device();
-	}
-
-	/* Add device to known devices */
-	index = find_index_for_request(FREE_SPOT);
-	memcpy(&devices[index].remote_device_id.u8[0], &curr_device_id->u8[0], DEVICE_ID_SIZE);
-	amount_of_known_devices++;
-
 	return index;
 }
 
@@ -226,34 +176,11 @@ remove_least_active_device(void)
  *	@param current device_index
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
+static void
 remove_sec_device(uint8_t index)
 {
 	reset_sec_data(index);
 	amount_of_known_devices--;
-}
-
-/*-----------------------------------------------------------------------------------*/
-/**
- *	Store the temporary security data in a free spot if not found
- */
-/*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
-store_reserved_sec_data(void)
-{
-	int index;
-
-	index = search_device_id(&devices[RESERVED_INDEX].remote_device_id,2);
-	if(index < 0) {
-		index = find_index_for_request(FREE_SPOT);
-	}
-
-	/* store security device data */
-	devices[index] = devices[RESERVED_INDEX];
-	devices[index].key_freshness = FRESH;
-
-	/* Reset RESERVED id */
-	memset(&devices[RESERVED_INDEX].remote_device_id.u8[0], 0, DEVICE_ID_SIZE);
 }
 
 ///*-----------------------------------------------------------------------------------*/

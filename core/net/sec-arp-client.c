@@ -32,8 +32,8 @@ struct device_sec_data devices[MAX_DEVICES];
 uint8_t  hasKeyIs_1;
 
 static short parse_hello_reply(uint8_t *buf);
-static void create_hello(void);
-static void set_security_data(uint8_t *buf);
+static void  create_hello(void);
+static void  set_security_data(uint8_t *buf);
 
 /*-----------------------------------------------------------------------------------*/
 /**
