@@ -21,11 +21,12 @@
 #define COMM_REPLY_MSG_SIZE		47	/* encryption_nonce(3) | msg_type(1) | encrypted_req_nonce(3) | encrypted_sessionkey(16) | encrypted_remote_device_id(16) | MIC(8) */
 #define VERIFY_REQUEST_MSG_SIZE	28	/* encryption_nonce(3) | msg_type(1) | encrypted_verify_nonce(3) | padding (12) | MIC(8) */
 #define VERIFY_REPLY_MSG_SIZE	28	/* encryption_nonce(3) | msg_type(1) | encrypted_remote_verify_nonce(3) | padding (12) | MIC(8) */
+#define HELLO_REPLY_MSG_SIZE	34	/* encryption_nonce(3) | encrypted_sensorkey(16) | encrypted_networkkey(16) | MIC(8) */
 
 /* ------------------------------------- */
 /* Message variables 					 */
 /* ------------------------------------- */
-#define MAX_MESSAGE_COUNT 	0xFFFFFFFF
+#define MAX_MESSAGE_COUNT 	0xFFFF
 #define MAX_NONCE_COUNT		0xFF
 #define MAX_MESSAGE_SIZE	50
 
@@ -87,13 +88,10 @@ typedef uint8_t keyExNonce_type_t;
 /* ------------------------------------- */
 void __attribute__((__far__)) set_session_key_of_index(int index);
 int  __attribute__((__far__)) search_device_id(uip_ipaddr_t* curr_device_id, uint8_t search_offset);
-
 uint8_t __attribute__((__far__)) find_index_for_request(keyfreshness_flags_type_t search_option);
 int  __attribute__((__far__)) remove_least_active_device(void);
-
 void __attribute__((__far__)) resetDeviceID_by_Index(uint8_t index);
 void __attribute__((__far__)) reset_sec_data(uint8_t index);
-
 void __attribute__((__far__)) copy_id_to_reserved(uint8_t index);
 
 

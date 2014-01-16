@@ -9,10 +9,13 @@
 #include "net/sec_data.h"
 #include "net/packetbuf.h"
 #include "sys/clock.h"
+#include "net/sec-arp-client.h"
+#include "dev/watchdog.h"	/* include to soft restart µP */
+#include "platform-conf.h"	/* include for xmem address */
 
 #include <string.h>
 
-#if ENABLE_CCM_APPLICATION & SEC_CLIENT | 1
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT
 
 #define DEBUG_SEC 0
 #if DEBUG_SEC
@@ -44,6 +47,7 @@
 #define S_IDLE 			0
 #define S_REQUEST_KEY	1
 #define S_UPDATE_KEY	2
+#define S_BOOTSTRAP_KEY	3
 
 /* Different key exchange states */
 #define S_INIT_REQUEST			0
@@ -63,7 +67,6 @@ static uint8_t send_tries;
 static struct uip_udp_conn *sec_conn;
 
 /* Global variables */
-struct device_sec_data devices[MAX_DEVICES];
 uint8_t amount_of_known_devices;
 uint8_t update_key_exchange_nonce;
 
@@ -81,7 +84,7 @@ static uint8_t remote_request_nonce[3];
 static uint8_t remote_verify_nonce[3];
 
 /* Functions used in key management layer */
-uint8_t __attribute__((__far__)) key_exchange_protocol(void);
+static uint8_t key_exchange_protocol(void);
 static void send_key_exchange_packet(void);
 static void init_reply_message(void);
 static void comm_request_message(void);
@@ -89,6 +92,7 @@ static void verify_request_message(void);
 static void verify_reply_message(void);
 static short parse_packet(uint8_t *data, uint16_t len);
 uint8_t __attribute__((__far__)) parse_comm_reply_message(uint8_t *data);
+static void parse_hello_reply(uint8_t *data, uint16_t len);
 
 static void store_reserved_sec_data(void);
 static int  add_device_id(uip_ipaddr_t* curr_device_id);
@@ -147,19 +151,29 @@ get_decrement_verify_nonce(uint8_t *temp_verify_nonce)
 
 /*-----------------------------------------------------------------------------------*/
 /**
- * Initialization function																GETEST!
+ * Initialization function
  */
 /*-----------------------------------------------------------------------------------*/
 void __attribute__((__far__))
 keymanagement_init(void)
 {
-	/* State to idle */
-	state = S_IDLE;
-	key_exchange_state = S_KEY_EXCHANGE_IDLE;
+	/* Check if we have a network key */
+	if(!hasKeys) {
+		state = S_BOOTSTRAP_KEY;
+	}
+	else {
+		/* State to idle */
+		state = S_IDLE;
+		key_exchange_state = S_KEY_EXCHANGE_IDLE;
+	}
 
 	/* Set reserved spot for temporary security data */
 	devices[RESERVED_INDEX].nonce_cntr = 1;
 	devices[RESERVED_INDEX].key_freshness = RESERVED;
+
+	/* Set central entity security data */
+	devices[CENTRAL_ENTITY_INDEX].nonce_cntr = 1;
+	devices[CENTRAL_ENTITY_INDEX].key_freshness = FRESH;
 
 	/* Init nonces */
 	request_nonce=1;
@@ -183,7 +197,7 @@ keymanagement_init(void)
  * @param the associated data (not encrypted but authenticated)
  * @param the remote ip-address
  * @param the remote udp-port
- * @return encrypt-flags																NIET GETEST!
+ * @return encrypt-flags
  */
 /*-----------------------------------------------------------------------------------*/
 short __attribute__((__far__))
@@ -282,7 +296,7 @@ keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8
  * @param the encrypted data
  * @param the packet length
  * @param the associated data
- * @return decrypt-flags																NIET GETEST!
+ * @return decrypt-flags
  */
 /*-----------------------------------------------------------------------------------*/
 short __attribute__((__far__))
@@ -342,7 +356,7 @@ keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint
 
 /*-----------------------------------------------------------------------------------*/
 /**
- * Key management process																	NIET AF!
+ * Key management process
  */
 /*-----------------------------------------------------------------------------------*/
 __attribute__((__far__))
@@ -372,8 +386,24 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 	while(1) {
 		PROCESS_YIELD();
 
-		if(etimer_expired(&periodic)) {
-			etimer_reset(&periodic);
+		if((etimer_expired(&periodic)) || (ev == tcpip_event)) {
+			/* Check if there is data to be processed */
+			if(uip_newdata()) {
+				/* Check if we have the right connection */
+				if(uip_udp_conn->lport == UIP_HTONS(UDP_CLIENT_SEC_PORT)) {
+					switch(state) {
+						case S_BOOTSTRAP_KEY:
+							/* bootstrap parser */
+							parse_hello_reply((uint8_t *) uip_appdata, uip_datalen());
+						default:
+							/* key-exchange parser */
+							state = parse_packet((uint8_t *) uip_appdata, uip_datalen());
+							break;
+					}
+				}
+			} else {
+				etimer_reset(&periodic);
+			}
 
 			/* Search for changes of nonce data */
 			device_index = find_index_for_request(UPDATE_NONCE);
@@ -395,18 +425,17 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 					break;
 
 				case S_REQUEST_KEY:
-					if(!(key_exchange_protocol())) state = S_IDLE;
+					state = key_exchange_protocol();
+					break;
+
+				case S_BOOTSTRAP_KEY:
+					state = S_BOOTSTRAP_KEY;
 					break;
 
 				default:
 					state = S_IDLE;
 					break;
 			}
-		}
-
-		if(ev == tcpip_event) {
-			if(!(key_exchange_protocol())) 	state = S_IDLE;
-			else 							state = S_REQUEST_KEY;
 		}
 	}
 
@@ -418,19 +447,12 @@ PROCESS_THREAD(keymanagement_process, ev, data)
  * key_exchange_protocol is the main callback (protocol) function that decides if the
  * protocol should continue or stop.
  *
- * @return stop/continue																	NIET AF!
+ * @return stop/continue
  */
 /*-----------------------------------------------------------------------------------*/
-uint8_t __attribute__((__far__))
+static uint8_t
 key_exchange_protocol(void)
 {
-	/* Check if there is data to be processed */
-	if(uip_newdata()) {
-		/* Check if we have the right connection */
-		if(uip_udp_conn->lport == UIP_HTONS(UDP_CLIENT_SEC_PORT)) {
-			if(!(parse_packet((uint8_t *) uip_appdata, uip_datalen()))) return 0;
-		}
-	}
 	PRINTFDEBUG("key: exchange state %d\n", key_exchange_state);
 	/* Is there anything to send? */
 	if(key_exchange_state == S_KEY_EXCHANGE_SUCCES) {
@@ -440,7 +462,7 @@ key_exchange_protocol(void)
 		/* Store security data */
 		store_reserved_sec_data();
 		key_exchange_state = S_KEY_EXCHANGE_IDLE;
-		return 0;
+		return S_IDLE;
 
 	} else if(key_exchange_state == S_KEY_EXCHANGE_FAILED) {
 		PRINTF("key: Failed\n");
@@ -451,7 +473,7 @@ key_exchange_protocol(void)
 		}
 		/* Key exchange failed */
 		key_exchange_state = S_KEY_EXCHANGE_IDLE;
-		return 0;
+		return S_IDLE;
 
 	} else if(key_exchange_state == S_KEY_EXCHANGE_IDLE) {
 		/* Reset RESERVED device */
@@ -459,7 +481,7 @@ key_exchange_protocol(void)
 
 		/* Reset device id */
 		memset(&devices[RESERVED_INDEX].remote_device_id.u8[0], 0, DEVICE_ID_SIZE);
-		return 0;
+		return S_IDLE;
 
 	}
 
@@ -475,7 +497,7 @@ key_exchange_protocol(void)
 	else send_tries++;
 
 
-	return 1;
+	return S_REQUEST_KEY;
 }
 
 /*-----------------------------------------------------------------------------------*/
@@ -541,7 +563,7 @@ send_key_exchange_packet(void)
 
 /*-----------------------------------------------------------------------------------*/
 /**
- *	Set keypacketbuf with init reply message							 					NIET AF!
+ *	Set keypacketbuf with init reply message
  */
 /*-----------------------------------------------------------------------------------*/
 static void
@@ -553,7 +575,7 @@ init_reply_message(void) {
 
 /*-----------------------------------------------------------------------------------*/
 /**
- *	Set keypacketbuf with communication request message										NIET GETEST
+ *	Set keypacketbuf with communication request message
  */
 /*-----------------------------------------------------------------------------------*/
 static void
@@ -578,7 +600,7 @@ comm_request_message(void) {
 
 /*-----------------------------------------------------------------------------------*/
 /**
- *	Set keypacketbuf with verify request message											NIET GETEST
+ *	Set keypacketbuf with verify request message
  */
 /*-----------------------------------------------------------------------------------*/
 static void
@@ -595,7 +617,7 @@ verify_request_message(void)
 
 /*-----------------------------------------------------------------------------------*/
 /**
- *	Set keypacketbuf with verify reply message											NIET GETEST
+ *	Set keypacketbuf with verify reply message
  */
 /*-----------------------------------------------------------------------------------*/
 static void
@@ -631,7 +653,7 @@ verify_reply_message(void)
  * @return failed/successful
  *
  * After specific time every step has to return to key exchange idle!
- * 																							NIET AF!
+ *
  */
 /*-----------------------------------------------------------------------------------*/
 static short
@@ -647,7 +669,7 @@ parse_packet(uint8_t *data, uint16_t len)
 	switch(key_exchange_state) {
 		case S_KEY_EXCHANGE_IDLE:
 			if(data[0] == S_INIT_REQUEST && len == INIT_REQUEST_MSG_SIZE) {
-				PRINTF("key: Got key-excahnge request\n");
+				PRINTF("key: Got key-exchange request\n");
 				/* Check if we know the source */
 				device_index = search_device_id(&UIP_IP_BUF->srcipaddr,0);
 				if(device_index < 0) {
@@ -658,7 +680,7 @@ parse_packet(uint8_t *data, uint16_t len)
 					}
 					memcpy(&devices[RESERVED_INDEX].remote_device_id.u8[0], &UIP_IP_BUF->srcipaddr.u8[0], DEVICE_ID_SIZE);
 				} else if(device_index == CENTRAL_ENTITY_INDEX) {
-					return 0;
+					return S_IDLE;
 				} else {
 					copy_id_to_reserved((uint8_t)device_index);
 				}
@@ -753,7 +775,7 @@ parse_packet(uint8_t *data, uint16_t len)
 			break;
 	}
 
-	return 1;
+	return S_REQUEST_KEY;
 }
 
 /*-----------------------------------------------------------------------------------*/
@@ -805,6 +827,42 @@ parse_comm_reply_message(uint8_t *data) {
 	PRINTF("key: Parse ok\n");
 
 	return 1;
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ *	Parse the bootstrap packet from server
+ *
+ *	format: | encryption_nonce(3) | network key(16) | central_entity_id(16) | sensor key(16) | MIC(8)
+ */
+/*-----------------------------------------------------------------------------------*/
+static void
+parse_hello_reply(uint8_t *data, uint16_t len)
+{
+	uint8_t temp_data_len = len & 0xff;
+
+	if(len == HELLO_REPLY_MSG_SIZE) {
+		/* Set central entity-ID for decryption */
+		memcpy(&devices[CENTRAL_ENTITY_INDEX].remote_device_id.u8[0], &UIP_IP_BUF->srcipaddr.u8[0], DEVICE_ID_SIZE);
+
+		if(keymanagement_decrypt_packet(&UIP_IP_BUF->srcipaddr, data, &temp_data_len, 0) == DECRYPT_OK) {
+			PRINTF("key: Got hello-reply\n");
+
+			/* Check if the remote-ID equals the src-IP */
+			if(memcmp(&data[19], &devices[CENTRAL_ENTITY_INDEX].remote_device_id.u8[0], DEVICE_ID_SIZE) != 0) {
+				/* Wrong id */
+				PRINTF("key: wrong id\n");
+				return;
+			}
+
+			/* Write security data to Flash */
+			xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
+			xmem_pwrite(&data[3], (SEC_KEY_SIZE*3), MAC_SECURITY_DATA);
+
+			PRINTF("key: reboot()\n");
+			watchdog_reboot();
+		}
+	}
 }
 
 /*-----------------------------------------------------------------------------------*/
@@ -881,5 +939,4 @@ update_nonce(uint8_t index)
 {
 	devices[index].key_freshness = FRESH;
 }
-
 #endif

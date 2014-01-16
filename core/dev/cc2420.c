@@ -84,14 +84,16 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG_SEC 0
+#define DEBUG_SEC 1
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
 #define PRINTF(...)
+#define PRINTDEBUG(...) printf(__VA_ARGS__)
 #else
 #define PRINTFSEC(...) do {} while (0)
 #define PRINTF(...)
+#define PRINTDEBUG(...)
 #endif
 
 #define DEBUG_LEDS DEBUG
@@ -148,6 +150,7 @@ static int cc2420_cca(void);
 /*static int detected_energy(void);*/
 
 #if ENABLE_CBC_LINK_SECURITY
+#include "net/sec-arp-client.h"
 #define ACK_PACKET_SIZE 	3
 static uint8_t mic_len;
 inline void cc2420_initLinkLayerSec(void);
@@ -718,7 +721,7 @@ cc2420_read(void *buf, unsigned short bufsize)
    * these packets aren't encrypted and give errors when performing
    * decryption.
    */
-  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+  if((len != (ACK_PACKET_SIZE + AUX_LEN)) || (hasKeys != 0)) {
 	  strobe(CC2420_SRXDEC);
 	  BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
   }
@@ -754,7 +757,14 @@ cc2420_read(void *buf, unsigned short bufsize)
 
   getrxdata(buf, len - AUX_LEN);
   pbuf = buf;
-  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+
+#if 1
+  uint8_t p;
+  PRINTDEBUG("R: ");
+  PRINTDEBUG("%.2X ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
+#endif
+
+  if((len != (ACK_PACKET_SIZE + AUX_LEN)) || (hasKeys != 0)) {
 	  if(pbuf[len-(AUX_LEN-1)] != 0x00)
 	  {
 		  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
@@ -825,7 +835,7 @@ cc2420_read(void *buf, unsigned short bufsize)
    * ACK-packet doens't have MIC message appended. Therefore
    * we don't need to subtract the mic-length from the total len.
    */
-  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+  if(len != (ACK_PACKET_SIZE + AUX_LEN))  {
 	  return len - AUX_LEN - mic_len;
   } else {
 	  return len - AUX_LEN;
@@ -1032,7 +1042,7 @@ setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *p_msg_ctr, u
 	else		CC2420_WRITE_RAM_REV(nonce, CC2420RAM_TXNONCE, 16);
 }
 /*---------------------------------------------------------------------------*/
-int
+int __attribute__((__far__))
 cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr, uint8_t *src_nonce_cntr,
 				uint8_t *data_len, unsigned short adata_len)
 {
@@ -1088,7 +1098,7 @@ cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr
 	return 1;
 }
 /*---------------------------------------------------------------------------*/
-int
+int __attribute__((__far__))
 cc2420_encrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *msg_cntr, uint8_t *nonce_cntr,
 				uint8_t *data_len, unsigned short adata_len)
 {

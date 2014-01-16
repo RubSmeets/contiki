@@ -238,11 +238,12 @@ static volatile uint8_t contikimac_keep_radio_on = 0;
 static volatile unsigned char we_are_sending = 0;
 static volatile unsigned char radio_is_on = 0;
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
-#define PRINTDEBUG(...) printf(__VA_ARGS__)
+#define PRINTF(...)
+#define PRINTDEBUG(...)
+#define PRINTFSEC(...) printf(__VA_ARGS__)
 #else
 #define PRINTF(...)
 #define PRINTDEBUG(...)
@@ -268,6 +269,10 @@ static struct compower_activity current_packet;
 static struct timer broadcast_rate_timer;
 static int broadcast_rate_counter;
 #endif /* CONTIKIMAC_CONF_BROADCAST_RATE_LIMIT */
+
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+#include "net/sec-arp-client.h"
+#endif
 
 /*---------------------------------------------------------------------------*/
 static void
@@ -560,20 +565,27 @@ send_packet(mac_callback_t mac_callback, void *mac_callback_ptr,
     is_broadcast = 1;
     PRINTDEBUG("contikimac: send broadcast\n");
 
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+    if(!hasKeys) {
+    	PRINTFSEC("contikimac: send broadcast hello\n");
+    	packetbuf_clear();
+    }
+#endif
+
     if(broadcast_rate_drop()) {
       return MAC_TX_COLLISION;
     }
   } else {
 #if UIP_CONF_IPV6
-    PRINTDEBUG("contikimac: send unicast to %02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[0],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[1],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[2],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[3],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[4],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[5],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[6],
-               packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[7]);
+	PRINTDEBUG("contikimac: send unicast to %02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[0],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[1],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[2],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[3],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[4],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[5],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[6],
+		packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[7]);
 #else /* UIP_CONF_IPV6 */
     PRINTDEBUG("contikimac: send unicast to %u.%u\n",
                packetbuf_addr(PACKETBUF_ADDR_RECEIVER)->u8[0],
@@ -606,6 +618,13 @@ send_packet(mac_callback_t mac_callback, void *mac_callback_ptr,
   }
   hdrlen += sizeof(struct hdr);
 #else
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+  if(!hasKeys) {
+	 /* Create hello packet */
+	 create_hello((uint8_t *)packetbuf_dataptr());
+	 packetbuf_set_datalen(HELLO_PACKETSIZE);
+  }
+#endif
   /* Create the MAC header for the data packet. */
   hdrlen = NETSTACK_FRAMER.create();
   if(hdrlen < 0) {
