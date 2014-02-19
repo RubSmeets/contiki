@@ -12,7 +12,7 @@
 
 #include <string.h>
 
-#if ENABLE_CCM_APPLICATION & SEC_CLIENT | 1
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT
 
 #define DEBUG_SEC 0
 #if DEBUG_SEC
