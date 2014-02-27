@@ -88,7 +88,7 @@
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
-#define PRINTF(...)
+#define PRINTF(...) printf(__VA_ARGS__)
 #define PRINTDEBUG(...) printf(__VA_ARGS__)
 #else
 #define PRINTFSEC(...) do {} while (0)
@@ -154,6 +154,13 @@ static int cc2420_cca(void);
 #define ACK_PACKET_SIZE 	3
 static uint8_t mic_len;
 inline void cc2420_initLinkLayerSec(void);
+#endif
+
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+uint8_t potentialHello;
+
+#define MIN_SIGNAL_STRENGTH 0x10
+#define HELLO_PACKET_LENGTH 32
 #endif
 
 #if ENABLE_CCM_APPLICATION
@@ -715,13 +722,23 @@ cc2420_read(void *buf, unsigned short bufsize)
   getrxbyte(&len);
   PRINTFSEC("len: %d\n", len);
 
-#if ENABLE_CBC_LINK_SECURITY
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
   /*
    * Check bufsize to know if we are waiting for ACK-packet
    * these packets aren't encrypted and give errors when performing
    * decryption.
    */
   if((len != (ACK_PACKET_SIZE + AUX_LEN)) || (hasKeys != 0)) {
+	  strobe(CC2420_SRXDEC);
+	  BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
+  }
+#elif ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+  /*
+   * Check bufsize to know if we are waiting for ACK-packet
+   * these packets aren't encrypted and give errors when performing
+   * decryption.
+   */
+  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
 	  strobe(CC2420_SRXDEC);
 	  BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
   }
@@ -749,7 +766,7 @@ cc2420_read(void *buf, unsigned short bufsize)
     return 0;
   }
 
-#if ENABLE_CBC_LINK_SECURITY
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
   /*
    * Check if we are receiving an ACK-packet. They don't have
    * a MIC message appended.
@@ -765,7 +782,7 @@ cc2420_read(void *buf, unsigned short bufsize)
 #endif
 
   if((len != (ACK_PACKET_SIZE + AUX_LEN)) || (hasKeys != 0)) {
-	  if(pbuf[len-(AUX_LEN-1)] != 0x00)
+	  if(pbuf[len-(AUX_LEN+1)] != 0x00)
 	  {
 		  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
 		  flushrx();
@@ -774,7 +791,36 @@ cc2420_read(void *buf, unsigned short bufsize)
 	  }
 	  PRINTF("cc2420: SUCCESS\n");
   }
+#elif ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+  /*
+   * Check if we are receiving an ACK-packet. They don't have
+   * a MIC message appended.
+   */
+  potentialHello = 0;
 
+  getrxdata(buf, len - AUX_LEN);
+  pbuf = buf;
+
+#if 1
+  uint8_t p;
+  PRINTDEBUG("R: ");
+  PRINTDEBUG("%.2X ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
+#endif
+
+  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
+	  if(pbuf[len-(AUX_LEN+1)] != 0x00) {
+		  if((len - AUX_LEN - mic_len) == HELLO_PACKET_LENGTH) {
+			  PRINTF("cc2420: Potential hello packet\n");
+			  potentialHello = 1;
+		  } else {
+			  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
+			  flushrx();
+			  RELEASE_LOCK();
+			  return 0;
+		  }
+	  }
+	  PRINTF("cc2420: SUCCESS\n");
+  }
 #else
   getrxdata(buf, len - AUX_LEN);
 #endif
@@ -798,6 +844,20 @@ cc2420_read(void *buf, unsigned short bufsize)
     cc2420_last_rssi = footer[0];
     cc2420_last_correlation = footer[1] & FOOTER1_CORRELATION;
 
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+    PRINTDEBUG("cc2420: rssi %02x\n", footer[0]);
+    PRINTDEBUG("cc2420: correlation %02x\n", cc2420_last_correlation);
+
+    /* Check the signal strength */
+    if(potentialHello == 1) {
+		if((!((footer[0] & 0x80)>0)) && ((footer[0] & 0x7F) > MIN_SIGNAL_STRENGTH)) {
+			PRINTDEBUG("cc2420: close enough\n");
+		} else {
+			PRINTDEBUG("cc2420: NOT close enough\n");
+			len = 0;
+		}
+    }
+#endif
 
     packetbuf_set_attr(PACKETBUF_ATTR_RSSI, cc2420_last_rssi);
     packetbuf_set_attr(PACKETBUF_ATTR_LINK_QUALITY, cc2420_last_correlation);
@@ -981,6 +1041,10 @@ cc2420_initLinkLayerSec(void)
 	/* Enable key material */
 	mic_len = MIC_LEN;
 
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+	potentialHello = 0;
+#endif
+
 	/* Set security control register 0 */
 	reg = getreg(CC2420_SECCTRL0);
 	/* Stand alone key 1, Use 8 bytes MIC, Use RX fifo protection */
@@ -1025,7 +1089,7 @@ setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *p_msg_ctr, u
 	/* NOG MAKEN DAT JE OOK KAN ENCRYPTEREN ZONDER ADATA!!!!!!*/
 
 	nonce[0] =  0x00 | 0x01 | 0x08;
-	memcpy(&nonce[1], &p_address_nonce[8], 8);	/* Setting source address */
+	memcpy(&nonce[1], &p_address_nonce[8], 8);	/* Setting source address using identifier*/
 	nonce[9] = 0xFF & (*p_msg_ctr>>24);			/* Setting frame counter */
 	nonce[10] = 0xFF & (*p_msg_ctr>>16);
 	nonce[11] = 0xFF & (*p_msg_ctr>>8);

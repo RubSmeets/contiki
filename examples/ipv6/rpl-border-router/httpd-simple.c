@@ -89,7 +89,7 @@ PT_THREAD(send_string(struct httpd_state *s, const char *str))
 }
 /*---------------------------------------------------------------------------*/
 const char http_content_type_html[] = "Content-type: text/html\r\n\r\n";
-static
+static __attribute__((__far__))
 PT_THREAD(send_headers(struct httpd_state *s, const char *statushdr))
 {
   /* char *ptr; */
@@ -121,7 +121,7 @@ PT_THREAD(send_headers(struct httpd_state *s, const char *statushdr))
 /*---------------------------------------------------------------------------*/
 const char http_header_200[] = "HTTP/1.0 200 OK\r\nServer: Contiki/2.4 http://www.sics.se/contiki/\r\nConnection: close\r\n";
 const char http_header_404[] = "HTTP/1.0 404 Not found\r\nServer: Contiki/2.4 http://www.sics.se/contiki/\r\nConnection: close\r\n";
-static
+static __attribute__((__far__))
 PT_THREAD(handle_output(struct httpd_state *s))
 {
   PT_BEGIN(&s->outputpt);
@@ -150,7 +150,7 @@ PT_THREAD(handle_output(struct httpd_state *s))
 const char http_get[] = "GET ";
 const char http_index_html[] = "/index.html";
 //const char http_referer[] = "Referer:"
-static
+static __attribute__((__far__))
 PT_THREAD(handle_input(struct httpd_state *s))
 {
   PSOCK_BEGIN(&s->sin);
@@ -205,7 +205,7 @@ handle_connection(struct httpd_state *s)
 }
 
 /*---------------------------------------------------------------------------*/
-void
+void __attribute__((__far__))
 httpd_appcall(void *state)
 {
   struct httpd_state *s = (struct httpd_state *)state;

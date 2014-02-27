@@ -52,6 +52,7 @@ sec_arp_init(void)
 	for(i=KEY_SIZE; i>0; i--) {sum |= temp_buf[i-1];}
 	if(!(sum))	{
 		hasKeys = 0;
+		PRINTF("No keys\n");
 	} else {
 		PRINTF("sec-arp: Key OK\n");
 

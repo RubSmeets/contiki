@@ -82,7 +82,6 @@
 /*---------------------------------------------------------------------------*/
 /* For Debug, logging, statistics                                            */
 /*---------------------------------------------------------------------------*/
-
 #define DEBUG DEBUG_NONE
 #include "net/uip-debug.h"
 
@@ -1107,7 +1106,7 @@ uip_process(uint8_t flag)
     UIP_LOG("ip: packet shorter than reported in IP header.");
     goto drop;
   }
-  
+
   PRINTF("IPv6 packet received from ");
   PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
   PRINTF(" to ");
@@ -1150,7 +1149,6 @@ uip_process(uint8_t flag)
         goto send;
     }
   }
-
 
   /* TBD Some Parameter problem messages */
   if(!uip_ds6_is_my_addr(&UIP_IP_BUF->destipaddr) &&
@@ -1460,7 +1458,6 @@ uip_process(uint8_t flag)
   remove_ext_hdr();
 
   PRINTF("Receiving UDP packet\n");
- 
   /* UDP processing is really just a hack. We don't do anything to the
      UDP/IP headers, but let the UDP application do all the hard
      work. If the application sets uip_slen, it has a packet to

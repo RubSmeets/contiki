@@ -1320,8 +1320,13 @@ packet_sent(void *ptr, int status, int transmissions)
  * packet.
  * \param dest the link layer destination address of the packet
  */
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+void
+send_packet(rimeaddr_t *dest)
+#else
 static void
 send_packet(rimeaddr_t *dest)
+#endif
 {
   /* Set the link layer destination address for the packet as a
    * packetbuf attribute. The MAC layer can access the destination

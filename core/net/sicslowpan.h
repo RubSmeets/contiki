@@ -319,6 +319,10 @@ struct sicslowpan_nh_compressor {
 
 int sicslowpan_get_last_rssi(void);
 
+#if ENABLE_CBC_LINK_SECURITY  & SEC_EDGE
+void send_packet(rimeaddr_t *dest);
+#endif
+
 extern const struct network_driver sicslowpan_driver;
 
 #endif /* SICSLOWPAN_H_ */

@@ -17,11 +17,12 @@
 
 #if ENABLE_CCM_APPLICATION & SEC_CLIENT
 
-#define DEBUG_SEC 0
+#define DEBUG_SEC 1
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
-#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#define PRINTFBOOT(...) printf(__VA_ARGS__)
+#define PRINTFDEBUG(...)
 #else
 #define PRINTFDEBUG(...)
 #define PRINTF(...)
@@ -157,9 +158,16 @@ get_decrement_verify_nonce(uint8_t *temp_verify_nonce)
 void __attribute__((__far__))
 keymanagement_init(void)
 {
+	uint8_t bootstrapKey[16] = {0xd3,0x7c,0x8c,0xf8,0x0f,0xff,0xae,0xe7,0xbb,0xf4,0xf9,0x80,0x3c,0x27,0x04,0x69};
 	/* Check if we have a network key */
 	if(!hasKeys) {
 		state = S_BOOTSTRAP_KEY;
+
+		/* Set the bootstrap-key for getting key material */
+		memcpy(devices[CENTRAL_ENTITY_INDEX].session_key, bootstrapKey, SEC_KEY_SIZE);
+
+		short i = 0;
+		PRINTFBOOT("Boot key: "); for(i=0; i<SEC_KEY_SIZE; i++) {PRINTFBOOT("%02x ", devices[CENTRAL_ENTITY_INDEX].session_key[i]);} PRINTFBOOT("\n");
 	}
 	else {
 		/* State to idle */
@@ -389,11 +397,13 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 		if((etimer_expired(&periodic)) || (ev == tcpip_event)) {
 			/* Check if there is data to be processed */
 			if(uip_newdata()) {
+				PRINTF("New data!\n");
 				/* Check if we have the right connection */
 				if(uip_udp_conn->lport == UIP_HTONS(UDP_CLIENT_SEC_PORT)) {
 					switch(state) {
 						case S_BOOTSTRAP_KEY:
 							/* bootstrap parser */
+							PRINTF("Parse hello reply\n");
 							parse_hello_reply((uint8_t *) uip_appdata, uip_datalen());
 						default:
 							/* key-exchange parser */
@@ -414,6 +424,7 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 			/* Search for changes in security data */
 			switch(state) {
 				case S_IDLE:
+					PRINTFBOOT("State IDLE\n");
 					device_index = find_index_for_request(EXPIRED);
 					if(device_index != MAX_DEVICES) {
 						state = S_REQUEST_KEY;
@@ -425,10 +436,12 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 					break;
 
 				case S_REQUEST_KEY:
+					PRINTFBOOT("State REQ key\n");
 					state = key_exchange_protocol();
 					break;
 
 				case S_BOOTSTRAP_KEY:
+					PRINTFBOOT("State Boot\n");
 					state = S_BOOTSTRAP_KEY;
 					break;
 

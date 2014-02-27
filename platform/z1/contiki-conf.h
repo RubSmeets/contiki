@@ -54,9 +54,9 @@
 #endif
 
 #if SEC_BORDER_ENABLED
-#define SEC_SERVER				 1
+#define SEC_EDGE				 1
 #else
-#define SEC_SERVER				 0
+#define SEC_EDGE				 0
 #endif
 
 #if SEC_NODE_ENABLED | SEC_BORDER_ENABLED

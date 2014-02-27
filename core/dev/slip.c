@@ -63,7 +63,7 @@ uint16_t slip_rubbish, slip_twopackets, slip_overflow, slip_ip_drop;
 
 #endif
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -117,6 +117,9 @@ slip_send(void)
   uint8_t c;
 
   slip_arch_writeb(SLIP_END);
+
+  PRINTF("uip-len: %d\n", uip_len);
+  //PRINTF("slip data: "); for(i=0; i<uip_len; i++) {PRINTF("%02x ", uip_buf[i]);} PRINTF("\n");
 
   ptr = &uip_buf[UIP_LLH_LEN];
   for(i = 0; i < uip_len; ++i) {

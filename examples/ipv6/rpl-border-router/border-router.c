@@ -51,7 +51,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
 #include "net/uip-debug.h"
 
 uint16_t dag_id[] = {0x1111, 0x1100, 0, 0, 0, 0, 0, 0x0011};
@@ -61,16 +61,24 @@ static uint8_t prefix_set;
 
 #if ENABLE_CBC_LINK_SECURITY
 #include "dev/cc2420.h"
+#include "net/rime/rimeaddr.h"
+#include "net/sec-arp-server.h"
+#include "net/sicslowpan.h"
 
 #define SLIP_SEC_PRE		'+'
 #define SLIP_SEC_KEY_REQ	'K'
+#define SLIP_SEC_KEY_REPLY	'R'
 
 static uint8_t key_set;
+static uip_ipaddr_t server_ipaddr;
 
 static void request_key(void);
+static void set_key(uint8_t *data);
+static void forward_hello_reply(uint8_t *data, uint16_t data_len);
 #endif
 
-#if ENABLE_CCM_APPLICATION & SEC_SERVER
+#if ENABLE_CCM_APPLICATION & SEC_EDGE
+#include "net/sec-arp-server.h"
 
 #define UDP_CLIENT_SEC_PORT 5446
 #define UDP_SERVER_SEC_PORT 5444
@@ -81,7 +89,7 @@ static void request_key(void);
 #define COMM_REPLY_MSG_SIZE	39
 #define ADATA_APPLICATION	4
 
-static struct uip_udp_conn *server_conn;
+static struct uip_udp_conn *gateway_conn;
 
 static void forward_packet_slip(uint8_t *data, uint16_t len);
 #endif
@@ -169,7 +177,7 @@ ipaddr_add(const uip_ipaddr_t *addr)
   }
 }
 /*---------------------------------------------------------------------------*/
-static
+static __attribute__((__far__))
 PT_THREAD(generate_routes(struct httpd_state *s))
 {
   static int i;
@@ -355,6 +363,7 @@ set_prefix_64(uip_ipaddr_t *prefix_64)
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
 }
 /*---------------------------------------------------------------------------*/
+__attribute__((__far__))
 PROCESS_THREAD(border_router_process, ev, data)
 {
   static struct etimer et;
@@ -391,14 +400,22 @@ PROCESS_THREAD(border_router_process, ev, data)
   }
 
 #if ENABLE_CBC_LINK_SECURITY
-  key_set = 0;
+   /*
+	* new connection with remote host at port 0
+	* to allow multiple remote ports on the same
+	* connection
+	*/
+  	gateway_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_SEC_PORT), NULL);
+	if(gateway_conn == NULL) {
+		PRINTF("No UDP conn, exiting proc!\n");
+		PROCESS_EXIT();
+	}
+	udp_bind(gateway_conn, UIP_HTONS(UDP_CLIENT_SEC_PORT));
 
-  /* Request network key */
-  while(!key_set) {
-    etimer_set(&et, CLOCK_SECOND);
-    request_key();
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-  }
+	/* Set server address */
+	uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
+
+	key_set = 0;
 #endif
 
   dag = rpl_set_root(RPL_DEFAULT_INSTANCE,(uip_ip6addr_t *)dag_id);
@@ -416,35 +433,32 @@ PROCESS_THREAD(border_router_process, ev, data)
   print_local_addresses();
 #endif
 
-#if ENABLE_CCM_APPLICATION & SEC_SERVER
-   /*
-	* new connection with remote host at port 0
-	* to allow multiple remote ports on the same
-	* connection
-	*/
-  	server_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_SEC_PORT), NULL);
-	if(server_conn == NULL) {
-		PRINTF("No UDP conn, exiting proc!\n");
-		PROCESS_EXIT();
-	}
-	udp_bind(server_conn, UIP_HTONS(UDP_SERVER_SEC_PORT));
-#endif
-
   while(1) {
+	/* Request key */
+	if(!key_set) {
+		request_key();
+	}
+
     PROCESS_YIELD();
     if (ev == sensors_event && data == &button_sensor) {
       PRINTF("Initiating global repair\n");
       rpl_repair_root(RPL_DEFAULT_INSTANCE);
     }
-#if ENABLE_CCM_APPLICATION & SEC_SERVER
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
     else if(ev == tcpip_event) {
+    	PRINTF("TCP EVENT\n");
     	/* Check if there is data to be processed */
 		if(uip_newdata()) {
 			PRINTF("edg: new data\n");
 			/* Check if we have the right connection */
-			if(uip_udp_conn->lport == UIP_HTONS(UDP_SERVER_SEC_PORT)) {
+			if(uip_udp_conn->lport == UIP_HTONS(UDP_CLIENT_SEC_PORT)) {
 				PRINTF("edg: right port\n");
-				forward_packet_slip((uint8_t *) uip_appdata, uip_datalen());
+				if(!key_set) {
+					set_key((uint8_t *) uip_appdata);
+				} else {
+					forward_hello_reply((uint8_t *) uip_appdata, uip_datalen());
+					//forward_packet_slip((uint8_t *) uip_appdata, uip_datalen());
+				}
 			}
 		}
 	}
@@ -459,27 +473,77 @@ PROCESS_THREAD(border_router_process, ev, data)
 static void
 request_key(void)
 {
-  /* mess up uip_buf with a dirty request... */
-  uip_buf[0] = SLIP_SEC_PRE;
-  uip_buf[1] = SLIP_SEC_KEY_REQ;
-  uip_len = 2;
-  slip_send();
-  uip_len = 0;
+	/* mess up uip_buf with a dirty request... */
+	uint8_t temp_buf[10];
+	temp_buf[0] = SLIP_SEC_PRE;
+	temp_buf[1] = SLIP_SEC_KEY_REQ;
+
+	/* Copy mac address */
+	memcpy(&temp_buf[2], &rimeaddr_node_addr.u8[0], 8);
+
+	PRINTF("Request key\n");
+	uip_udp_packet_sendto(gateway_conn, temp_buf, 10, &server_ipaddr, UIP_HTONS(UDP_SERVER_SEC_PORT));
 }
 
 /*---------------------------------------------------------------------------*/
-void
-set_key(uint8_t *key)
+static void
+set_key(uint8_t *data)
 {
-	key_set = 1;
-	PRINTF("Setting key\n");
-	/* write key to cc2420 reg */
-	CC2420_WRITE_RAM_REV(&key[0], CC2420RAM_KEY0, 16);
+	if(data[0] == SLIP_SEC_PRE) {
+		if(data[1] == SLIP_SEC_KEY_REPLY) {
+			PRINTF("Setting key\n");
+			int b = 0;
+			PRINTF("key: "); for(b=0; b<16; b++) {PRINTF("%02x ",data[2+b]);} PRINTF("\n");
+			/* write key to cc2420 reg */
+			CC2420_WRITE_RAM_REV(&data[2], CC2420RAM_KEY0, 16);
+			key_set = 1;
+		}
+	}
 }
+/*---------------------------------------------------------------------------*/
+void
+forward_hello_packet(uint8_t *data, uint16_t data_len, const uint8_t *mac_address) {
+	uint8_t buf[25];
 
+	PRINTF("Forwarding hello packet %d\n", data_len);
+	if(data[0] == HELLO_PACKET) {
+		/* Copy buffer */
+		memcpy(&buf[0], &data[0], data_len);
+
+		/* Copy mac address */
+		memcpy(&buf[data_len], mac_address, 8);
+
+		/* Send packet to edge router */
+		uip_udp_packet_sendto(gateway_conn, buf, data_len+8, &server_ipaddr, UIP_HTONS(UDP_SERVER_SEC_PORT));
+	}
+}
+/*---------------------------------------------------------------------------*/
+static void
+forward_hello_reply(uint8_t *data, uint16_t data_len) {
+	rimeaddr_t dest;
+
+	PRINTF("Forwarding hello reply %d\n", data_len);
+	/* Send dirty mac packet */
+	if(data[0] == HELLO_PACKET_REPLY) {
+
+		/* Set mac retransmissions */
+		packetbuf_set_attr(PACKETBUF_ATTR_MAX_MAC_TRANSMISSIONS, 2);
+
+		/* Set packetbuf payload */
+		memcpy(packetbuf_dataptr(), &data[1], data_len-1);
+		packetbuf_set_datalen(data_len-1);
+
+		/* Set dest addr to broadcast */
+		rimeaddr_copy(&dest, &rimeaddr_null);
+
+		/* Send broadcast */
+		send_packet(&dest);
+	}
+}
+/*---------------------------------------------------------------------------*/
 #endif
 
-#if ENABLE_CCM_APPLICATION & SEC_SERVER
+#if ENABLE_CCM_APPLICATION & SEC_EDGE
 /*---------------------------------------------------------------------------*/
 static void
 forward_packet_slip(uint8_t *data, uint16_t len)
@@ -508,55 +572,56 @@ send_comm_reply(uint8_t *msg)
 	uint8_t tot_len = 0;
 	uint8_t i;
 
-	/* write key to cc2420 reg */
-	CC2420_WRITE_RAM_REV(&msg[0], CC2420RAM_KEY1, 16);
-	PRINTF("edg: key ");
-	for(i=0; i<16; i++) PRINTF("%02x ", msg[i]);
-	PRINTF("\n");
+//	/* write key to cc2420 reg */
+//	CC2420_WRITE_RAM_REV(&msg[0], CC2420RAM_KEY1, 16);
+//	PRINTF("edg: key ");
+//	for(i=0; i<16; i++) PRINTF("%02x ", msg[i]);
+//	PRINTF("\n");
+//
+//	/* Get message to be encrypted */
+//	memcpy(&temp_buf[0], &msg[16], COMM_REPLY_MSG_SIZE);
+//
+//	/* Get remote ip address */
+//	memcpy(&toaddr.u8[0], &msg[39], 16);
+//
+//	PRINTF("edg: toaddr ");
+//	for(i=0; i<16; i++) PRINTF("%02x ", toaddr.u8[i]);
+//	PRINTF("\n");
+//
+//	/* Get nonce */
+//	msg_cntr = ((uint16_t)temp_buf[0] << 8) | (uint16_t)temp_buf[1];
+//	nonce_cntr = temp_buf[2];
+//
+//	PRINTF("edg: msg %02x nonce %02x\n", msg_cntr, nonce_cntr);
+//
+//	tot_len = COMM_REPLY_MSG_SIZE;
+//
+//	PRINTF("edg: data ");
+//	for(i=0; i<tot_len; i++) PRINTF("%02x ", temp_buf[i]);
+//	PRINTF("\n");
+//
+//	PRINTF("edg: enc_addr ");
+//	for(i=0; i<16; i++) PRINTF("%02x ", msg[55+i]);
+//	PRINTF("\n");
+//
+//	/* Encrypt message */
+//	if(!cc2420_encrypt_ccm(temp_buf, &msg[55], &msg_cntr, &nonce_cntr, &tot_len, ADATA_APPLICATION)) {
+//		PRINTF("edg: Encryption failed\n");
+//		return;
+//	}
+//
+//	PRINTF("edg: encrypt ");
+//	for(i=0; i<tot_len; i++) PRINTF("%02x ", temp_buf[i+1]);
+//	PRINTF("\n");
+//
+//	/* Send encrypted message over udp-connection */
+//	uip_udp_packet_sendto(gateway_conn, &temp_buf[1], (int)tot_len, &toaddr, UIP_HTONS(UDP_CLIENT_SEC_PORT));
+//
+//	/* Get message of device 2 */
+//	temp_buf[0] = SLIP_SEC_PRE;
+//	temp_buf[1] = SLIP_SEC_COMM_2;
+//	slip_write(&temp_buf[0], 2);
 
-	/* Get message to be encrypted */
-	memcpy(&temp_buf[0], &msg[16], COMM_REPLY_MSG_SIZE);
-
-	/* Get remote ip address */
-	memcpy(&toaddr.u8[0], &msg[39], 16);
-
-	PRINTF("edg: toaddr ");
-	for(i=0; i<16; i++) PRINTF("%02x ", toaddr.u8[i]);
-	PRINTF("\n");
-
-	/* Get nonce */
-	msg_cntr = ((uint16_t)temp_buf[0] << 8) | (uint16_t)temp_buf[1];
-	nonce_cntr = temp_buf[2];
-
-	PRINTF("edg: msg %02x nonce %02x\n", msg_cntr, nonce_cntr);
-
-	tot_len = COMM_REPLY_MSG_SIZE;
-
-	PRINTF("edg: data ");
-	for(i=0; i<tot_len; i++) PRINTF("%02x ", temp_buf[i]);
-	PRINTF("\n");
-
-	PRINTF("edg: enc_addr ");
-	for(i=0; i<16; i++) PRINTF("%02x ", msg[55+i]);
-	PRINTF("\n");
-
-	/* Encrypt message */
-	if(!cc2420_encrypt_ccm(temp_buf, &msg[55], &msg_cntr, &nonce_cntr, &tot_len, ADATA_APPLICATION)) {
-		PRINTF("edg: Encryption failed\n");
-		return;
-	}
-
-	PRINTF("edg: encrypt ");
-	for(i=0; i<tot_len; i++) PRINTF("%02x ", temp_buf[i+1]);
-	PRINTF("\n");
-
-	/* Send encrypted message over udp-connection */
-	uip_udp_packet_sendto(server_conn, &temp_buf[1], (int)tot_len, &toaddr, UIP_HTONS(UDP_CLIENT_SEC_PORT));
-
-	/* Get message of device 2 */
-	temp_buf[0] = SLIP_SEC_PRE;
-	temp_buf[1] = SLIP_SEC_COMM_2;
-	slip_write(&temp_buf[0], 2);
 }
 
 #endif

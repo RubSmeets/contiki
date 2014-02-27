@@ -274,6 +274,11 @@ static int broadcast_rate_counter;
 #include "net/sec-arp-client.h"
 #endif
 
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+#include "dev/cc2420.h"
+#include "net/sec-arp-server.h"
+#endif
+
 /*---------------------------------------------------------------------------*/
 static void
 on(void)
@@ -988,6 +993,16 @@ input_packet(void)
         ctimer_stop(&ct);
       }
 
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+      /* Check if we received key request packet BEFORE SEQ CHECKER!! */
+	  if(potentialHello == 1) {
+		  /* Parse input */
+		  forward_hello_packet((uint8_t *)packetbuf_dataptr(), packetbuf_datalen(), &packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[0]);
+	  } else {
+		  return;
+	  }
+#endif
+
       /* Check for duplicate packet. */
       if(mac_sequence_is_duplicate()) {
         /* Drop the packet. */
@@ -1012,7 +1027,7 @@ input_packet(void)
 
       PRINTDEBUG("contikimac: data (%u)\n", packetbuf_datalen());
       NETSTACK_MAC.input();
-      return;
+	  return;
     } else {
       PRINTDEBUG("contikimac: data not for us\n");
     }

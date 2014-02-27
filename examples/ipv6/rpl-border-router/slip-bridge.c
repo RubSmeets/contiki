@@ -51,17 +51,13 @@
 
 void set_prefix_64(uip_ipaddr_t *);
 
-#if ENABLE_CBC_LINK_SECURITY
-void set_key(uint8_t *key);
-#endif
-
-#if ENABLE_CCM_APPLICATION & SEC_SERVER
+#if ENABLE_CCM_APPLICATION & SEC_EDGE
 void send_comm_reply(uint8_t *msg);
 #endif
 
 static uip_ipaddr_t last_sender;
 /*---------------------------------------------------------------------------*/
-static void
+static void __attribute__((__far__))
 slip_input_callback(void)
 {
  // PRINTF("SIN: %u\n", uip_len);
@@ -95,16 +91,9 @@ slip_input_callback(void)
     }
     uip_len = 0;
   }
-#if ENABLE_CCM_APPLICATION & SEC_SERVER
+#if ENABLE_CCM_APPLICATION & SEC_EDGE
   else if (uip_buf[0] == '+') {
-	  uint8_t i;
-	  PRINTF("Got config message of type sec\n");
-	  if(uip_buf[1] == 'K') {
-		  PRINTF("key: ");
-		  for(i=0; i<16; i++) PRINTF("%02x ", uip_buf[2]);
-		  PRINTF("\n");
-		  set_key(&uip_buf[2]);
-	  } else if(uip_buf[1] == 'R') {
+	  if(uip_buf[1] == 'R') {
 		  PRINTF("Got comm reply\n");
 		  send_comm_reply(&uip_buf[2]);
 	  }
