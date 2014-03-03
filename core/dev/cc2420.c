@@ -150,27 +150,25 @@ static int cc2420_cca(void);
 /*static int detected_energy(void);*/
 
 #if ENABLE_CBC_LINK_SECURITY
-#include "net/sec-arp-client.h"
 #define ACK_PACKET_SIZE 	3
-static uint8_t mic_len;
-inline void cc2420_initLinkLayerSec(void);
-#endif
-
-#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
-uint8_t potentialHello;
-
-#define MIN_SIGNAL_STRENGTH 0x10
-#define HELLO_PACKET_LENGTH 32
-#endif
-
-#if ENABLE_CCM_APPLICATION
 #define CC2420_SEC_TXKEYSEL_1 (1<<6)
 #define CC2420_SEC_RXKEYSEL_1 (1<<5)
 #define RX 1
 #define TX 0
 
+static uint8_t mic_len;
+uint8_t potentialHello;
+
 static void setAssociatedData(unsigned short RX_nTX, unsigned short hdrlen);
 static void setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *msg_ctr, uint8_t *p_nonce_ctr);
+inline void cc2420_initLinkLayerSec(void);
+#endif
+
+#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+#define MIN_SIGNAL_STRENGTH 0x10
+#define HELLO_PACKET_LENGTH 32
+#elif ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+#include "net/sec-arp-client.h"
 #endif
 
 signed char cc2420_last_rssi;
@@ -722,17 +720,7 @@ cc2420_read(void *buf, unsigned short bufsize)
   getrxbyte(&len);
   PRINTFSEC("len: %d\n", len);
 
-#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
-  /*
-   * Check bufsize to know if we are waiting for ACK-packet
-   * these packets aren't encrypted and give errors when performing
-   * decryption.
-   */
-  if((len != (ACK_PACKET_SIZE + AUX_LEN)) || (hasKeys != 0)) {
-	  strobe(CC2420_SRXDEC);
-	  BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND);
-  }
-#elif ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+#if ENABLE_CBC_LINK_SECURITY
   /*
    * Check bufsize to know if we are waiting for ACK-packet
    * these packets aren't encrypted and give errors when performing
@@ -771,6 +759,7 @@ cc2420_read(void *buf, unsigned short bufsize)
    * Check if we are receiving an ACK-packet. They don't have
    * a MIC message appended.
    */
+  potentialHello = 0;
 
   getrxdata(buf, len - AUX_LEN);
   pbuf = buf;
@@ -781,13 +770,18 @@ cc2420_read(void *buf, unsigned short bufsize)
   PRINTDEBUG("%.2X ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
 #endif
 
-  if((len != (ACK_PACKET_SIZE + AUX_LEN)) || (hasKeys != 0)) {
+  if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
 	  if(pbuf[len-(AUX_LEN+1)] != 0x00)
 	  {
-		  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
-		  flushrx();
-		  RELEASE_LOCK();
-		  return 0;
+		  if((hasKeys == 0) && ((len - AUX_LEN - mic_len) == HELLO_REPLY_PACKETSIZE)) {
+			  PRINTF("cc2420: Potential hello reply\n");
+			  potentialHello = 1;
+		  } else {
+			  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
+			  flushrx();
+			  RELEASE_LOCK();
+			  return 0;
+		  }
 	  }
 	  PRINTF("cc2420: SUCCESS\n");
   }
@@ -892,7 +886,7 @@ cc2420_read(void *buf, unsigned short bufsize)
 
 #if ENABLE_CBC_LINK_SECURITY
   /*
-   * ACK-packet doens't have MIC message appended. Therefore
+   * ACK-packet doesn't have MIC message appended. Therefore
    * we don't need to subtract the mic-length from the total len.
    */
   if(len != (ACK_PACKET_SIZE + AUX_LEN))  {
@@ -1041,9 +1035,8 @@ cc2420_initLinkLayerSec(void)
 	/* Enable key material */
 	mic_len = MIC_LEN;
 
-#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
+	/* Hello packet identifier */
 	potentialHello = 0;
-#endif
 
 	/* Set security control register 0 */
 	reg = getreg(CC2420_SECCTRL0);

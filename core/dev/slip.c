@@ -59,10 +59,6 @@ uint16_t slip_rubbish, slip_twopackets, slip_overflow, slip_ip_drop;
 #define SLIP_STATISTICS(statement) statement
 #endif
 
-#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
-
-#endif
-
 #define DEBUG 1
 #if DEBUG
 #include <stdio.h>
@@ -328,9 +324,7 @@ PROCESS_THREAD(slip_process, ev, data)
 #ifdef SLIP_CONF_TCPIP_INPUT
       SLIP_CONF_TCPIP_INPUT();
 #else
-#if !(ENABLE_CBC_LINK_SECURITY & SEC_CLIENT)	/* SECURITY CLIENT */
       tcpip_input();
-#endif /* SECURITY CLIENT */
 #endif
     }
 

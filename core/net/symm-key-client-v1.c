@@ -5,13 +5,11 @@
  *      Author: crea
  */
 
-#include "symm-key-client-v1.h"
+#include "net/symm-key-client-v1.h"
 #include "net/sec_data.h"
 #include "net/packetbuf.h"
 #include "sys/clock.h"
 #include "net/sec-arp-client.h"
-#include "dev/watchdog.h"	/* include to soft restart µP */
-#include "platform-conf.h"	/* include for xmem address */
 
 #include <string.h>
 
@@ -22,9 +20,10 @@
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
 #define PRINTFBOOT(...) printf(__VA_ARGS__)
-#define PRINTFDEBUG(...)
+#define PRINTFDEBUG(...) printf(__VA_ARGS__)
 #else
 #define PRINTFDEBUG(...)
+#define PRINTFBOOT(...)
 #define PRINTF(...)
 #endif
 
@@ -93,7 +92,6 @@ static void verify_request_message(void);
 static void verify_reply_message(void);
 static short parse_packet(uint8_t *data, uint16_t len);
 uint8_t __attribute__((__far__)) parse_comm_reply_message(uint8_t *data);
-static void parse_hello_reply(uint8_t *data, uint16_t len);
 
 static void store_reserved_sec_data(void);
 static int  add_device_id(uip_ipaddr_t* curr_device_id);
@@ -158,7 +156,9 @@ get_decrement_verify_nonce(uint8_t *temp_verify_nonce)
 void __attribute__((__far__))
 keymanagement_init(void)
 {
-	uint8_t bootstrapKey[16] = {0xd3,0x7c,0x8c,0xf8,0x0f,0xff,0xae,0xe7,0xbb,0xf4,0xf9,0x80,0x3c,0x27,0x04,0x69};
+	//uint8_t bootstrapKey[16] = {0x42,0x96,0x75,0x58,0xa0,0x41,0x18,0x76,0x3b,0x01,0x56,0xbe,0xc9,0xb4,0x53,0x36}; //node 7
+	uint8_t bootstrapKey[16] = {0x30,0xcf,0xad,0xd4,0x1b,0x2a,0xb9,0x72,0x00,0xa7,0x3c,0x30,0x82,0x00,0xf8,0x12}; //node 2
+
 	/* Check if we have a network key */
 	if(!hasKeys) {
 		state = S_BOOTSTRAP_KEY;
@@ -402,9 +402,8 @@ PROCESS_THREAD(keymanagement_process, ev, data)
 				if(uip_udp_conn->lport == UIP_HTONS(UDP_CLIENT_SEC_PORT)) {
 					switch(state) {
 						case S_BOOTSTRAP_KEY:
-							/* bootstrap parser */
-							PRINTF("Parse hello reply\n");
-							parse_hello_reply((uint8_t *) uip_appdata, uip_datalen());
+							/* Drop packet */
+							PRINTF("Drop packet\n");
 						default:
 							/* key-exchange parser */
 							state = parse_packet((uint8_t *) uip_appdata, uip_datalen());
@@ -840,42 +839,6 @@ parse_comm_reply_message(uint8_t *data) {
 	PRINTF("key: Parse ok\n");
 
 	return 1;
-}
-
-/*-----------------------------------------------------------------------------------*/
-/**
- *	Parse the bootstrap packet from server
- *
- *	format: | encryption_nonce(3) | network key(16) | central_entity_id(16) | sensor key(16) | MIC(8)
- */
-/*-----------------------------------------------------------------------------------*/
-static void
-parse_hello_reply(uint8_t *data, uint16_t len)
-{
-	uint8_t temp_data_len = len & 0xff;
-
-	if(len == HELLO_REPLY_MSG_SIZE) {
-		/* Set central entity-ID for decryption */
-		memcpy(&devices[CENTRAL_ENTITY_INDEX].remote_device_id.u8[0], &UIP_IP_BUF->srcipaddr.u8[0], DEVICE_ID_SIZE);
-
-		if(keymanagement_decrypt_packet(&UIP_IP_BUF->srcipaddr, data, &temp_data_len, 0) == DECRYPT_OK) {
-			PRINTF("key: Got hello-reply\n");
-
-			/* Check if the remote-ID equals the src-IP */
-			if(memcmp(&data[19], &devices[CENTRAL_ENTITY_INDEX].remote_device_id.u8[0], DEVICE_ID_SIZE) != 0) {
-				/* Wrong id */
-				PRINTF("key: wrong id\n");
-				return;
-			}
-
-			/* Write security data to Flash */
-			xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
-			xmem_pwrite(&data[3], (SEC_KEY_SIZE*3), MAC_SECURITY_DATA);
-
-			PRINTF("key: reboot()\n");
-			watchdog_reboot();
-		}
-	}
 }
 
 /*-----------------------------------------------------------------------------------*/

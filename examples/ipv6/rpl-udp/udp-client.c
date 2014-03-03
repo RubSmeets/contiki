@@ -78,6 +78,8 @@ static uip_ipaddr_t ipaddr_edge;
 
 uint8_t temp_sec_device_list[66];
 
+static uint8_t push_cntr = 0;
+
 /*---------------------------------------------------------------------------*/
 PROCESS(udp_client_process, "UDP client process");
 AUTOSTART_PROCESSES(&udp_client_process);
@@ -250,303 +252,33 @@ PROCESS_THREAD(udp_client_process, ev, data)
     	char buf[100];
     	uint8_t data_len = 19;
 
-#if MEASURE_ENERGY
-		rtimer_clock_t t1, t2;
-		uint8_t i;
-#if MEASURE_TIME
-		rtimer_clock_t tbuf[100];
-		uint8_t index = 0;
-		uint8_t count[5];
+    	/* Increment push counter */
+    	push_cntr++;
+    	if(push_cntr == 10) {
+    		PRINTF("Erase keys\n");
+    		xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
+    	} else {
+    		PRINTF("Push count: %d\n", push_cntr);
+    	}
 
-		t2=RTIMER_NOW();
-
-		tbuf[0] = TAR;
-		tbuf[1] = TAR;
-		tbuf[2] = TAR;
-		tbuf[3] = TAR;
-		tbuf[4] = TAR;
-		tbuf[5] = TAR;
-		tbuf[6] = TAR;
-		tbuf[7] = TAR;
-		tbuf[8] = TAR;
-		tbuf[9] = TAR;
-		tbuf[10] = TAR;
-		tbuf[11] = TAR;
-		tbuf[12] = TAR;
-		tbuf[13] = TAR;
-		tbuf[14] = TAR;
-		tbuf[15] = TAR;
-		tbuf[16] = TAR;
-		tbuf[17] = TAR;
-		tbuf[18] = TAR;
-		tbuf[19] = TAR;
-		tbuf[20] = TAR;
-		tbuf[21] = TAR;
-		tbuf[22] = TAR;
-		tbuf[23] = TAR;
-		tbuf[24] = TAR;
-		tbuf[25] = TAR;
-		tbuf[26] = TAR;
-		tbuf[27] = TAR;
-		tbuf[28] = TAR;
-		tbuf[29] = TAR;
-		tbuf[30] = TAR;
-		tbuf[31] = TAR;
-		tbuf[32] = TAR;
-		tbuf[33] = TAR;
-		tbuf[34] = TAR;
-		tbuf[35] = TAR;
-		tbuf[36] = TAR;
-		tbuf[37] = TAR;
-		tbuf[38] = TAR;
-		tbuf[39] = TAR;
-		tbuf[40] = TAR;
-		tbuf[41] = TAR;
-		tbuf[42] = TAR;
-		tbuf[43] = TAR;
-		tbuf[44] = TAR;
-		tbuf[45] = TAR;
-		tbuf[46] = TAR;
-		tbuf[47] = TAR;
-		tbuf[48] = TAR;
-		tbuf[49] = TAR;
-		tbuf[50] = TAR;
-		tbuf[51] = TAR;
-		tbuf[52] = TAR;
-		tbuf[53] = TAR;
-		tbuf[54] = TAR;
-		tbuf[55] = TAR;
-		tbuf[56] = TAR;
-		tbuf[57] = TAR;
-		tbuf[58] = TAR;
-		tbuf[59] = TAR;
-		tbuf[60] = TAR;
-		tbuf[61] = TAR;
-		tbuf[62] = TAR;
-		tbuf[63] = TAR;
-		tbuf[64] = TAR;
-		tbuf[65] = TAR;
-		tbuf[66] = TAR;
-		tbuf[67] = TAR;
-		tbuf[68] = TAR;
-		tbuf[69] = TAR;
-		tbuf[70] = TAR;
-		tbuf[71] = TAR;
-		tbuf[72] = TAR;
-		tbuf[73] = TAR;
-		tbuf[74] = TAR;
-		tbuf[75] = TAR;
-		tbuf[76] = TAR;
-		tbuf[77] = TAR;
-		tbuf[78] = TAR;
-		tbuf[79] = TAR;
-		tbuf[80] = TAR;
-		tbuf[81] = TAR;
-		tbuf[82] = TAR;
-		tbuf[83] = TAR;
-		tbuf[84] = TAR;
-		tbuf[85] = TAR;
-		tbuf[86] = TAR;
-		tbuf[87] = TAR;
-		tbuf[88] = TAR;
-		tbuf[89] = TAR;
-		tbuf[90] = TAR;
-		tbuf[91] = TAR;
-		tbuf[92] = TAR;
-		tbuf[93] = TAR;
-		tbuf[94] = TAR;
-		tbuf[95] = TAR;
-		tbuf[96] = TAR;
-		tbuf[97] = TAR;
-		tbuf[98] = TAR;
-		tbuf[99] = TAR;
-
-//		for(i=0; i<50; i++) {
-//			tbuf[i] = TAR;
-//		}
-
-		for(i=0; i<99; i++) {
-			if(tbuf[i] == tbuf[i+1]) {
-				count[index]++;
-			} else {
-				index++;
-			}
-		}
-
-		PRINTF("TICKS=%u\n", t2);
-		PRINTF("tbuf: ");
-		for(i=0; i<100; i++) PRINTF("%u ", tbuf[i]);
-		PRINTF("\n");
-
-		PRINTF("counts: ");
-		for(i=0; i<5; i++) {
-			PRINTF("%d ", count[i]);
-			count[i] = 0;
-		}
-		PRINTF("\n");
-#endif
-
-    	sprintf(&buf[data_ptr], "11111111111111222222222233333333334444444444555555555566666666667777777777888888888899999999990000000");
-
-    	rtimer_clock_t tbuf[50];
-		uint8_t index = 0;
-		uint8_t count[5];
-#define FINE_STEP	636 	/* nano seconds -> 48 times write 2-byte to variable in 1/32768Hz interval, gives 1/(32768Hz*48) */
-#define NORMAL_STEP	30518	/* nano seconds -> 1/32768Hz */
-
-		uint32_t difference = 0;
-		uint32_t normalTime = 0;
-		uint32_t fineTime = 0;
-		uint32_t totalTime = 0;
-
-		/* Energy measurement  variables*/
-		struct energy_time {
-		unsigned short source;
-		long cpu;
-		long lpm;
-		long transmit;
-		long listen;
-		};
-
-		static struct energy_time diff;
-		static struct energy_time last;
-		/*************************/
-
-		/* update all counters */
-		energest_flush();
-
-		last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
-		last.lpm = energest_type_time(ENERGEST_TYPE_LPM);
-		last.transmit = energest_type_time(ENERGEST_TYPE_TRANSMIT);
-		last.listen = energest_type_time(ENERGEST_TYPE_LISTEN);
-		t1=RTIMER_NOW();
-
-		/************** Start what we want to measure ********************/
-		//radio->on();
-		/* Encrypt message */
-		data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
-
-		/************** Finish what we want to measure ********************/
-
-
-		tbuf[0] = TAR;
-		tbuf[1] = TAR;
-		tbuf[2] = TAR;
-		tbuf[3] = TAR;
-		tbuf[4] = TAR;
-		tbuf[5] = TAR;
-		tbuf[6] = TAR;
-		tbuf[7] = TAR;
-		tbuf[8] = TAR;
-		tbuf[9] = TAR;
-		tbuf[10] = TAR;
-		tbuf[11] = TAR;
-		tbuf[12] = TAR;
-		tbuf[13] = TAR;
-		tbuf[14] = TAR;
-		tbuf[15] = TAR;
-		tbuf[16] = TAR;
-		tbuf[17] = TAR;
-		tbuf[18] = TAR;
-		tbuf[19] = TAR;
-		tbuf[20] = TAR;
-		tbuf[21] = TAR;
-		tbuf[22] = TAR;
-		tbuf[23] = TAR;
-		tbuf[24] = TAR;
-		tbuf[25] = TAR;
-		tbuf[26] = TAR;
-		tbuf[27] = TAR;
-		tbuf[28] = TAR;
-		tbuf[29] = TAR;
-		tbuf[30] = TAR;
-		tbuf[31] = TAR;
-		tbuf[32] = TAR;
-		tbuf[33] = TAR;
-		tbuf[34] = TAR;
-		tbuf[35] = TAR;
-		tbuf[36] = TAR;
-		tbuf[37] = TAR;
-		tbuf[38] = TAR;
-		tbuf[39] = TAR;
-		tbuf[40] = TAR;
-		tbuf[41] = TAR;
-		tbuf[42] = TAR;
-		tbuf[43] = TAR;
-		tbuf[44] = TAR;
-		tbuf[45] = TAR;
-		tbuf[46] = TAR;
-		tbuf[47] = TAR;
-		tbuf[48] = TAR;
-		tbuf[49] = TAR;
-
-		t2=RTIMER_NOW();
-
-		diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - last.cpu;
-		diff.lpm = energest_type_time(ENERGEST_TYPE_LPM) - last.lpm;
-		diff.transmit = energest_type_time(ENERGEST_TYPE_TRANSMIT) - last.transmit;
-		diff.listen = energest_type_time(ENERGEST_TYPE_LISTEN) - last.listen;
-
-		PRINTF("CPU=%lu, LPM=%lu, TRANSMIT=%lu, LISTEN=%lu, TICKS=%u\n", diff.cpu, diff.lpm, diff.transmit, diff.listen, t2-t1);
-
-
-		PRINTF("t1 time: %u\n", t1);
-		for(i=0; i<(50-1); i++) {
-			if(tbuf[i] == tbuf[i+1]) {
-				count[index]++;
-			} else {
-				index++;
-			}
-		}
-
-		difference = (tbuf[0]-1) - t1;
-		normalTime = difference*NORMAL_STEP;
-		fineTime = FINE_STEP*(48 - count[0]);
-		totalTime = normalTime + fineTime;
-
-		PRINTF("Time in nano seconds: %lu\n", totalTime);
-
-		PRINTF("counts: ");
-		for(i=0; i<5; i++) {
-			PRINTF("%d ", count[i]);
-			count[i] = 0;
-		}
-		PRINTF("\n");
-
-#else
     	sprintf(&buf[data_ptr], "Toggle light on/off");
     	uint8_t i;
     	PRINTF("Plain:  "); for(i=0; i<data_len; i++) PRINTF("%c", buf[i]); PRINTF("\n");
 
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT
     	data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+    	uip_udp_packet_sendto(client_conn, &buf[data_ptr], 26, &ipaddr_edge, UIP_HTONS(5444));
+#else
+    	uip_udp_packet_sendto(client_conn, &buf[data_ptr], 26, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
 #endif
-
-//    	PRINTF("result: %d\n", data_ptr);
-//    	PRINTF("Erase keys\n");
-//    	PRINTF("print\n");
-//    	PRINTF("Time %ld\n", (unsigned long)clock_time());
-//    	PRINTF("Seconds %ld\n", clock_seconds());
-//    	xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
-//    	hasKeyIs_1 = 0;
-//    	cc2420_init();
-
-//    	uint8_t i;
-//    	for(i=0; i<16; i++) {temp_sec_device_list[i+16] = 8;}
-//    	temp_sec_device_list[15] = 2;
-//    	temp_sec_device_list[32] = 1;
-//    	for(i=0; i<16; i++) {temp_sec_device_list[i+49] = 9;}
-//    	temp_sec_device_list[48] = 3;
-//    	temp_sec_device_list[65] = 4;
-//
-//
-//    	PRINTF("App mem set\n");
-//    	xmem_erase(XMEM_ERASE_UNIT_SIZE, APP_SECURITY_DATA);
-//    	xmem_pwrite(temp_sec_device_list, 66, APP_SECURITY_DATA);
     }
     
     if(etimer_expired(&periodic)) {
       etimer_reset(&periodic);
       ctimer_set(&backoff_timer, SEND_TIME, send_packet, NULL);
+
+      /* Reset push counter */
+      push_cntr = 0;
 
 #if WITH_COMPOWER
       if (print == 0) {

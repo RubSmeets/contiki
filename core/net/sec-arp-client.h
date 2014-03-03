@@ -11,7 +11,7 @@
 #include <string.h>
 
 /* Defines the reply packet length */
-#define HELLO_REPLY_PACKETSIZE 	51
+#define HELLO_REPLY_PACKETSIZE 	74
 #define HELLO_PACKETSIZE 		17
 
 #define HELLO_PACKET 	'H'
@@ -24,5 +24,6 @@ extern uint8_t hasKeys;
 
 void __attribute__((__far__)) sec_arp_init(void);
 void __attribute__((__far__)) create_hello(uint8_t *buf);
+void __attribute__((__far__)) parse_hello_reply(uint8_t *packet, uint16_t len);
 
 #endif /* SEC_ARP_H_ */

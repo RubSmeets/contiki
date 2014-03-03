@@ -271,6 +271,7 @@ static int broadcast_rate_counter;
 #endif /* CONTIKIMAC_CONF_BROADCAST_RATE_LIMIT */
 
 #if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+#include "dev/cc2420.h"
 #include "net/sec-arp-client.h"
 #endif
 
@@ -998,8 +999,17 @@ input_packet(void)
 	  if(potentialHello == 1) {
 		  /* Parse input */
 		  forward_hello_packet((uint8_t *)packetbuf_dataptr(), packetbuf_datalen(), &packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[0]);
-	  } else {
 		  return;
+	  }
+#elif ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
+      /* Check if we received key request packet BEFORE SEQ CHECKER!! */
+	  if(!hasKeys) {
+		  if(potentialHello == 1) {
+			  /* Parse input */
+			  parse_hello_reply((uint8_t *)packetbuf_dataptr(), packetbuf_datalen());
+		  } else {
+			  return;
+		  }
 	  }
 #endif
 

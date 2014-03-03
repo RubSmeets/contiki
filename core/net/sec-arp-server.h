@@ -21,6 +21,5 @@
 #define SEC_ARP_REPLY	2
 
 void forward_hello_packet(uint8_t *data, uint16_t data_len, const uint8_t *mac_address);
-void parse_hello_req(uint8_t *buf);
 
 #endif /* SEC_ARP_SERVER_H_ */

@@ -21,7 +21,6 @@
 #define COMM_REPLY_MSG_SIZE		47	/* encryption_nonce(3) | msg_type(1) | encrypted_req_nonce(3) | encrypted_sessionkey(16) | encrypted_remote_device_id(16) | MIC(8) */
 #define VERIFY_REQUEST_MSG_SIZE	28	/* encryption_nonce(3) | msg_type(1) | encrypted_verify_nonce(3) | padding (12) | MIC(8) */
 #define VERIFY_REPLY_MSG_SIZE	28	/* encryption_nonce(3) | msg_type(1) | encrypted_remote_verify_nonce(3) | padding (12) | MIC(8) */
-#define HELLO_REPLY_MSG_SIZE	34	/* encryption_nonce(3) | encrypted_sensorkey(16) | encrypted_networkkey(16) | MIC(8) */
 
 /* ------------------------------------- */
 /* Message variables 					 */

@@ -11,10 +11,12 @@
 #include "dev/cc2420.h"
 #include "dev/xmem.h"
 #include "contiki-conf.h"
+#include "dev/watchdog.h"	/* include to soft restart µP */
+#include "platform-conf.h"	/* include for xmem address */
 
-#if ENABLE_CBC_LINK_SECURITY
+#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -86,6 +88,51 @@ create_hello(uint8_t *buf)
 	}
 
 	PRINTF("sec-arp: create\n");
+}
+
+/*-----------------------------------------------------------------------------------*/
+/**
+ *	Parse the bootstrap packet from server
+ *
+ *	format: | encryption_nonce(3) | network key(16) | central_entity_id(16) | sensor key(16) | MIC(8)
+ */
+/*-----------------------------------------------------------------------------------*/
+void __attribute__((__far__))
+parse_hello_reply(uint8_t *data, uint16_t len)
+{
+	uint8_t state, i;
+	uint8_t temp_data_len = len & 0xff;
+	uint16_t msg_cntr = (uint16_t)data[0] << 8 | data[1];
+	uint8_t address[16];
+
+	/* Get own ip */
+	for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
+		state = uip_ds6_if.addr_list[i].state;
+		if(uip_ds6_if.addr_list[i].isused && state == ADDR_PREFERRED) {
+			memcpy(&address[0], &uip_ds6_if.addr_list[i].ipaddr.u8[0], 16);
+		}
+	}
+
+	/* Set bootstrap key for decryption */
+	CC2420_WRITE_RAM_REV(&devices[0].session_key[0], CC2420RAM_KEY1, KEY_SIZE);
+
+	/* Decrypt message */
+	cc2420_decrypt_ccm(data, address, &msg_cntr, &data[2], &temp_data_len, NONCE_SIZE);
+
+	PRINTF("sec-arp: dec_data "); for(i=0;i<temp_data_len;i++) PRINTF("%02x ", data[i]); PRINTF("\n");
+
+	/* Check if authentication was successful */
+	if(data[temp_data_len-1] == 0x00) {
+		/* Write security data to Flash */
+		xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
+		xmem_pwrite(&data[3], (SEC_KEY_SIZE*3), MAC_SECURITY_DATA);
+
+		PRINTF("sec-arp: reboot()\n");
+		watchdog_reboot();
+	} else {
+		PRINTF("sec-arp: auth. failed\n");
+		return;
+	}
 }
 
 /*-----------------------------------------------------------------------------------*/

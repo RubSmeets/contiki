@@ -235,6 +235,14 @@ void uip_log(char *msg);
 #define UIP_LOG(m)
 #endif /* UIP_LOGGING == 1 */
 
+#define DEBUG 1
+#if DEBUG
+#include <stdio.h>
+#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#else
+#define PRINTFDEBUG(...) do {} while (0)
+#endif
+
 #if ! UIP_ARCH_ADD32
 void
 uip_add32(uint8_t *op32, uint16_t op16)
@@ -1095,6 +1103,7 @@ uip_process(uint8_t flag)
      UDP/IP headers, but let the UDP application do all the hard
      work. If the application sets uip_slen, it has a packet to
      send. */
+  PRINTFDEBUG("uip: input\n");
 #if UIP_UDP_CHECKSUMS
   uip_len = uip_len - UIP_IPUDPH_LEN;
   uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPUDPH_LEN];
@@ -1111,6 +1120,7 @@ uip_process(uint8_t flag)
   /* Make sure that the UDP destination port number is not zero. */
   if(UDPBUF->destport == 0) {
     UIP_LOG("udp: zero port.");
+    PRINTFDEBUG("uip: port zero\n");
     goto drop;
   }
 
@@ -1132,9 +1142,11 @@ uip_process(uint8_t flag)
        (uip_ipaddr_cmp(&uip_udp_conn->ripaddr, &uip_all_zeroes_addr) ||
 	uip_ipaddr_cmp(&uip_udp_conn->ripaddr, &uip_broadcast_addr) ||
 	uip_ipaddr_cmp(&BUF->srcipaddr, &uip_udp_conn->ripaddr))) {
+      PRINTFDEBUG("uip: udp-found\n");
       goto udp_found;
     }
   }
+  PRINTFDEBUG("uip: udp no matcht\n");
   UIP_LOG("udp: no matching connection found");
   UIP_STAT(++uip_stat.udp.drop);
 #if UIP_CONF_ICMP_DEST_UNREACH && !UIP_CONF_IPV6
@@ -1175,6 +1187,7 @@ uip_process(uint8_t flag)
   uip_flags = UIP_NEWDATA;
   uip_sappdata = uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPUDPH_LEN];
   uip_slen = 0;
+  PRINTFDEBUG("uip: app call here\n");
   UIP_UDP_APPCALL();
 
  udp_send:
