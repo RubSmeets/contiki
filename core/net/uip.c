@@ -75,6 +75,14 @@
 #include "net/uip_arp.h"
 #include "net/uip_arch.h"
 
+#define DEBUG_SEC 1
+#if DEBUG_SEC
+#include <stdio.h>
+#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#else
+#define PRINTFDEBUG(...) do {} while (0)
+#endif
+
 #if !UIP_CONF_IPV6 /* If UIP_CONF_IPV6 is defined, we compile the
 		      uip6.c file instead of this one. Therefore
 		      this #ifndef removes the entire compilation
@@ -234,14 +242,6 @@ void uip_log(char *msg);
 #else
 #define UIP_LOG(m)
 #endif /* UIP_LOGGING == 1 */
-
-#define DEBUG 1
-#if DEBUG
-#include <stdio.h>
-#define PRINTFDEBUG(...) printf(__VA_ARGS__)
-#else
-#define PRINTFDEBUG(...) do {} while (0)
-#endif
 
 #if ! UIP_ARCH_ADD32
 void
@@ -472,7 +472,7 @@ struct uip_udp_conn *
 uip_udp_new(const uip_ipaddr_t *ripaddr, uint16_t rport)
 {
   register struct uip_udp_conn *conn;
-  
+  PRINTFDEBUG("new conn\n");
   /* Find an unused local port. */
  again:
   ++lastport;
@@ -681,7 +681,7 @@ void
 uip_process(uint8_t flag)
 {
   register struct uip_conn *uip_connr = uip_conn;
-
+  PRINTFDEBUG("uip: process\n");
 #if UIP_UDP
   if(flag == UIP_UDP_SEND_CONN) {
     goto udp_send;
@@ -819,6 +819,7 @@ uip_process(uint8_t flag)
 #if UIP_UDP
   if(flag == UIP_UDP_TIMER) {
     if(uip_udp_conn->lport != 0) {
+      PRINTFDEBUG("uip: timer udp\n");
       uip_conn = NULL;
       uip_sappdata = uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPUDPH_LEN];
       uip_len = uip_slen = 0;
@@ -835,12 +836,13 @@ uip_process(uint8_t flag)
   UIP_STAT(++uip_stat.ip.recv);
 
   /* Start of IP input header processing code. */
-  
+  PRINTFDEBUG("uip: start input\n");
 #if UIP_CONF_IPV6
   /* Check validity of the IP header. */
   if((BUF->vtc & 0xf0) != 0x60)  { /* IP version and header length. */
     UIP_STAT(++uip_stat.ip.drop);
     UIP_STAT(++uip_stat.ip.vhlerr);
+    PRINTFDEBUG("uip: invalid ipv6\n");
     UIP_LOG("ipv6: invalid version.");
     goto drop;
   }
@@ -875,6 +877,7 @@ uip_process(uint8_t flag)
 		      header (40 bytes). */
 #endif /* UIP_CONF_IPV6 */
   } else {
+	PRINTFDEBUG("uip: shorter than reported\n");
     UIP_LOG("ip: packet shorter than reported in IP header.");
     goto drop;
   }
@@ -946,6 +949,7 @@ uip_process(uint8_t flag)
     if(!uip_ipaddr_cmp(&BUF->destipaddr, &uip_hostaddr) &&
        BUF->destipaddr.u16[0] != UIP_HTONS(0xff02)) {
       UIP_STAT(++uip_stat.ip.drop);
+      PRINTFDEBUG("uip: Not for us\n");
       goto drop;
     }
 #endif /* UIP_CONF_IPV6 */
@@ -971,6 +975,7 @@ uip_process(uint8_t flag)
 
 #if UIP_UDP
   if(BUF->proto == UIP_PROTO_UDP) {
+	PRINTFDEBUG("uip: input ok\n");
     goto udp_input;
   }
 #endif /* UIP_UDP */
@@ -1954,6 +1959,7 @@ uip_process(uint8_t flag)
   return;
 
  drop:
+  PRINTFDEBUG("uip: drop\n");
   uip_len = 0;
   uip_flags = 0;
   return;

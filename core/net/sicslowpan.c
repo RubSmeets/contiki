@@ -90,6 +90,14 @@ uint8_t p;
 #define PRINTSICSLOWPANBUF()
 #endif /* DEBUG == 1*/
 
+#define DEBUG_SEC 0
+#if DEBUG_SEC
+#include <stdio.h>
+#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#else
+#define PRINTFDEBUG(...) do {} while (0)
+#endif
+
 #if UIP_LOGGING
 #include <stdio.h>
 void uip_log(char *msg);
@@ -1593,6 +1601,7 @@ output(const uip_lladdr_t *localdest)
 static void
 input(void)
 {
+  PRINTFDEBUG("six: input\n");
   /* size of the IP packet (read from fragment) */
   uint16_t frag_size = 0;
   /* offset of the fragment in the IP packet */
@@ -1665,7 +1674,7 @@ input(void)
     default:
       break;
   }
-
+  PRINTFDEBUG("six: hier1\n");
   /* We are currently reassembling a packet, but have just received the first
    * fragment of another packet. We can either ignore it and hope to receive
    * the rest of the under-reassembly packet fragments, or we can discard the
@@ -1821,6 +1830,8 @@ input(void)
    * If we have a full IP packet in sicslowpan_buf, deliver it to
    * the IP stack
    */
+  PRINTFDEBUG("sicslowpan_init processed_ip_in_len %d, sicslowpan_len %d\n",
+         processed_ip_in_len, sicslowpan_len);
   PRINTF("sicslowpan_init processed_ip_in_len %d, sicslowpan_len %d\n",
          processed_ip_in_len, sicslowpan_len);
   if(processed_ip_in_len == 0 || (processed_ip_in_len == sicslowpan_len)) {

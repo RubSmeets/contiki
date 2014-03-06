@@ -16,7 +16,7 @@
 
 #if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -87,7 +87,7 @@ create_hello(uint8_t *buf)
 		}
 	}
 
-	PRINTF("sec-arp: create\n");
+	PRINTF("sec-arp: create hello\n");
 }
 
 /*-----------------------------------------------------------------------------------*/
@@ -127,6 +127,8 @@ parse_hello_reply(uint8_t *data, uint16_t len)
 		xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
 		xmem_pwrite(&data[3], (SEC_KEY_SIZE*3), MAC_SECURITY_DATA);
 
+		/* Reset nonce data in flash */
+		xmem_erase(XMEM_ERASE_UNIT_SIZE, APP_NONCE_DATA);
 		PRINTF("sec-arp: reboot()\n");
 		watchdog_reboot();
 	} else {
@@ -143,6 +145,7 @@ parse_hello_reply(uint8_t *data, uint16_t len)
 static void
 init_security_data(uint8_t *buf)
 {
+	PRINTF("sec-arp: setting security data\n");
 	/* write network key to cc2420 reg */
 	CC2420_WRITE_RAM_REV(&buf[0], CC2420RAM_KEY0, KEY_SIZE);
 

@@ -85,6 +85,14 @@ static struct etimer periodic;
 extern struct etimer uip_reass_timer;
 #endif
 
+#define DEBUG_SEC 0
+#if DEBUG_SEC
+#include <stdio.h>
+#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#else
+#define PRINTFDEBUG(...) do {} while (0)
+#endif
+
 #if UIP_TCP
 /**
  * \internal Structure for holding a TCP port and a process ID.
@@ -208,6 +216,7 @@ packet_input(void)
 #else /* UIP_CONF_IP_FORWARD */
   if(uip_len > 0) {
     check_for_tcp_syn();
+    PRINTFDEBUG("tcpip: input packet\n");
     uip_input();
     if(uip_len > 0) {
 #if UIP_CONF_TCP_SPLIT
@@ -312,7 +321,7 @@ udp_new(const uip_ipaddr_t *ripaddr, uint16_t port, void *appstate)
 {
   struct uip_udp_conn *c;
   uip_udp_appstate_t *s;
-  
+
   c = uip_udp_new(ripaddr, port);
   if(c == NULL) {
     return NULL;
@@ -520,6 +529,7 @@ eventhandler(process_event_t ev, process_data_t data)
 #endif /* UIP_UDP */
 
     case PACKET_INPUT:
+      PRINTFDEBUG("go input\n");
       packet_input();
       break;
   };
@@ -528,6 +538,7 @@ eventhandler(process_event_t ev, process_data_t data)
 void
 tcpip_input(void)
 {
+  PRINTFDEBUG("post input\n");
   process_post_synch(&tcpip_process, PACKET_INPUT, NULL);
   uip_len = 0;
 #if UIP_CONF_IPV6
@@ -754,8 +765,10 @@ tcpip_uipcall(void)
   
 #if UIP_UDP
   if(uip_conn != NULL) {
+	PRINTFDEBUG("tcpip: con\n");
     ts = &uip_conn->appstate;
   } else {
+	PRINTFDEBUG("tcpip: no con\n");
     ts = &uip_udp_conn->appstate;
   }
 #else /* UIP_UDP */
@@ -788,6 +801,7 @@ tcpip_uipcall(void)
 #endif /* UIP_TCP */
   
   if(ts->p != NULL) {
+	PRINTFDEBUG("tcpip: posting event: %s\n", ts->p->name);
     process_post_synch(ts->p, tcpip_event, ts->state);
   }
 }

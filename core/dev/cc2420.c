@@ -84,12 +84,12 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG_SEC 1
+#define DEBUG_SEC 0
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
 #define PRINTF(...) printf(__VA_ARGS__)
-#define PRINTDEBUG(...) printf(__VA_ARGS__)
+#define PRINTDEBUG(...)
 #else
 #define PRINTFSEC(...) do {} while (0)
 #define PRINTF(...)
@@ -418,6 +418,8 @@ cc2420_transmit(unsigned short payload_len)
 #if ENABLE_CBC_LINK_SECURITY
   /* Wait until encryption complete */
   BUSYWAIT_UNTIL(!(status() & BV(CC2420_ENC_BUSY)), RTIMER_SECOND / 10);
+
+  PRINTDEBUG("Transmit %d\n", payload_len);
 #endif
 
 #else /* WITH_SEND_CCA */
@@ -515,6 +517,13 @@ cc2420_prepare(const void *payload, unsigned short payload_len)
   PRINTFSEC("Pay_len: %d, tot_len: %d\n", payload_len, total_len);
 #else
   total_len = payload_len + AUX_LEN;
+#endif
+
+#if 0
+  uint8_t p;
+  uint8_t *pbuf = (uint8_t *) payload;
+  PRINTDEBUG("T: ");
+  PRINTDEBUG("%d ", payload_len);for(p = 0; p < payload_len; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
 #endif
 
   CC2420_WRITE_FIFO_BUF(&total_len, 1);
@@ -683,7 +692,7 @@ PROCESS_THREAD(cc2420_process, ev, data)
     packetbuf_clear();
     packetbuf_set_attr(PACKETBUF_ATTR_TIMESTAMP, last_packet_timestamp);
     len = cc2420_read(packetbuf_dataptr(), PACKETBUF_SIZE);
-    PRINTFSEC("cc2420: len after read %d", len);
+    PRINTF("cc2420: len after read %d\n", len);
     
     packetbuf_set_datalen(len);
     
@@ -767,7 +776,7 @@ cc2420_read(void *buf, unsigned short bufsize)
 #if 1
   uint8_t p;
   PRINTDEBUG("R: ");
-  PRINTDEBUG("%.2X ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
+  PRINTDEBUG("%d ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
 #endif
 
   if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
@@ -798,7 +807,7 @@ cc2420_read(void *buf, unsigned short bufsize)
 #if 1
   uint8_t p;
   PRINTDEBUG("R: ");
-  PRINTDEBUG("%.2X ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
+  PRINTDEBUG("%d ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%.2x", pbuf[p]);PRINTDEBUG("\n");
 #endif
 
   if(len != (ACK_PACKET_SIZE + AUX_LEN)) {

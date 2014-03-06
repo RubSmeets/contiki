@@ -34,7 +34,7 @@
 /* ------------------------------------- */
 #define SEC_DATA_SIZE 			32
 #define SEC_KEY_SIZE			16
-#define KEY_NONCE_SIZE			4
+#define KEY_NONCE_SIZE			2
 #define NONCE_CNTR_SIZE			1
 #define LENGTH_SIZE				1	/* To ensure that the data array stays inbounds */
 #define ADATA_KEYEXCHANGE		1

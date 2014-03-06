@@ -90,7 +90,7 @@ tcpip_handler(void)
 	result = keymanagement_decrypt_packet(&UIP_IP_BUF->srcipaddr, (uint8_t *)appdata, &len, 0);
 #endif
 
-    PRINTF("Decrypt ");
+    PRINTF("Text ");
     for(i=3; i<len-11; i++)PRINTF("%c", appdata[i]);
     PRINTF("\n");
 
@@ -156,7 +156,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
 #elif 1
 /* Mode 2 - 16 bits inline */
   //uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
-  uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0xc30c, 0, 0, 2);
+  //uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0xc30c, 0, 0, 4);
+  uip_ip6addr(&ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 4);
 #else
 /* Mode 3 - derived from link local (MAC) address */
   uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 0);

@@ -85,6 +85,14 @@
 #define DEBUG DEBUG_NONE
 #include "net/uip-debug.h"
 
+#define DEBUG_SEC 0
+#if DEBUG_SEC
+#include <stdio.h>
+#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#else
+#define PRINTFDEBUG(...) do {} while (0)
+#endif
+
 #if UIP_CONF_IPV6_RPL
 #include "rpl/rpl.h"
 #endif /* UIP_CONF_IPV6_RPL */
@@ -1103,6 +1111,7 @@ uip_process(uint8_t flag)
      * header (40 bytes).
      */
   } else {
+	PRINTFDEBUG("uip6: packet to shorter\n");
     UIP_LOG("ip: packet shorter than reported in IP header.");
     goto drop;
   }
@@ -1115,6 +1124,7 @@ uip_process(uint8_t flag)
 
   if(uip_is_addr_mcast(&UIP_IP_BUF->srcipaddr)){
     UIP_STAT(++uip_stat.ip.drop);
+    PRINTFDEBUG("uip6: Dropping packet, src is mcast\n");
     PRINTF("Dropping packet, src is mcast\n");
     goto drop;
   }
@@ -1228,6 +1238,7 @@ uip_process(uint8_t flag)
 #if UIP_UDP
       case UIP_PROTO_UDP:
         /* UDP, for both IPv4 and IPv6 */
+    	PRINTFDEBUG("uip6: input\n");
         goto udp_input;
 #endif /* UIP_UDP */
       case UIP_PROTO_ICMP6:
@@ -1360,6 +1371,7 @@ uip_process(uint8_t flag)
   
   icmp6_input:
   /* This is IPv6 ICMPv6 processing code. */
+  PRINTFDEBUG("uip6: icmp6_input\n");
   PRINTF("icmp6_input: length %d type: %d \n", uip_len, UIP_ICMP_BUF->type);
 
 #if UIP_CONF_IPV6_CHECKS
@@ -1457,6 +1469,7 @@ uip_process(uint8_t flag)
 
   remove_ext_hdr();
 
+  PRINTFDEBUG("uip6: Receiving UDP packet\n");
   PRINTF("Receiving UDP packet\n");
   /* UDP processing is really just a hack. We don't do anything to the
      UDP/IP headers, but let the UDP application do all the hard
@@ -1483,6 +1496,7 @@ uip_process(uint8_t flag)
 
   /* Make sure that the UDP destination port number is not zero. */
   if(UIP_UDP_BUF->destport == 0) {
+	PRINTFDEBUG("uip6: zero port\n");
     PRINTF("udp: zero port.\n");
     goto drop;
   }
@@ -1498,6 +1512,8 @@ uip_process(uint8_t flag)
        connection is bound to a remote port. Finally, if the
        connection is bound to a remote IP address, the source IP
        address of the packet is checked. */
+	PRINTFDEBUG("conn rem: %d loc: %d\n", uip_udp_conn->rport, uip_udp_conn->lport);
+	PRINTFDEBUG("in des: %d src: %d\n", UIP_UDP_BUF->destport, UIP_UDP_BUF->srcport);
     if(uip_udp_conn->lport != 0 &&
        UIP_UDP_BUF->destport == uip_udp_conn->lport &&
        (uip_udp_conn->rport == 0 ||
@@ -1507,6 +1523,7 @@ uip_process(uint8_t flag)
       goto udp_found;
     }
   }
+  PRINTFDEBUG("uip6: no matching connection found\n");
   PRINTF("udp: no matching connection found\n");
   UIP_STAT(++uip_stat.udp.drop);
 
@@ -1518,6 +1535,7 @@ uip_process(uint8_t flag)
 #endif
 
  udp_found:
+  PRINTFDEBUG("uip6: In udp_found\n");
   PRINTF("In udp_found\n");
   UIP_STAT(++uip_stat.udp.recv);
  
@@ -2292,6 +2310,7 @@ uip_process(uint8_t flag)
   return;
 
  drop:
+  PRINTFDEBUG("uip6: Drop packet\n");
   uip_len = 0;
   uip_ext_len = 0;
   uip_ext_bitmap = 0;
