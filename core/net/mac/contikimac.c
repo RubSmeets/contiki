@@ -238,7 +238,7 @@ static volatile uint8_t contikimac_keep_radio_on = 0;
 static volatile unsigned char we_are_sending = 0;
 static volatile unsigned char radio_is_on = 0;
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...)
@@ -247,6 +247,7 @@ static volatile unsigned char radio_is_on = 0;
 #else
 #define PRINTF(...)
 #define PRINTDEBUG(...)
+#define PRINTFSEC(...)
 #endif
 
 #if CONTIKIMAC_CONF_COMPOWER

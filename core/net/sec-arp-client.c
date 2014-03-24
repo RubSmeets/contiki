@@ -10,6 +10,7 @@
 #include "net/uip-ds6.h"
 #include "dev/cc2420.h"
 #include "dev/xmem.h"
+#include "dev/leds.h"
 #include "contiki-conf.h"
 #include "dev/watchdog.h"	/* include to soft restart µP */
 #include "platform-conf.h"	/* include for xmem address */
@@ -54,6 +55,7 @@ sec_arp_init(void)
 	for(i=KEY_SIZE; i>0; i--) {sum |= temp_buf[i-1];}
 	if(!(sum))	{
 		hasKeys = 0;
+		leds_on(LEDS_BLUE);
 		PRINTF("No keys\n");
 	} else {
 		PRINTF("sec-arp: Key OK\n");
@@ -151,7 +153,8 @@ init_security_data(uint8_t *buf)
 
 	/* Set sensor key and security app data */
 	devices[0].msg_cntr = 0;
-	memcpy(&devices[0].remote_device_id.u8[0], &buf[APPLAYER_OFFSET], 16);
-	memcpy(&devices[0].session_key[0], &buf[APPLAYER_OFFSET+16], KEY_SIZE);
+	memcpy(&devices[CENTRAL_ENTITY_INDEX].remote_device_id.u8[0], &buf[APPLAYER_OFFSET], 16);
+	memcpy(&devices[SERVER_INDEX].remote_device_id.u8[0], &buf[APPLAYER_OFFSET], 16);
+	memcpy(&devices[CENTRAL_ENTITY_INDEX].session_key[0], &buf[APPLAYER_OFFSET+16], KEY_SIZE);
 }
 #endif

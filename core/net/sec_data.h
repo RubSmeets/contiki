@@ -19,8 +19,11 @@
 #define INIT_REPLY_MSG_SIZE		4	/* msg_type(1) | req_nonce(3) */
 #define COMM_REQUEST_MSG_SIZE	39	/* msg_type(1) | device_id(16) | remote_device_id(16) | req_nonce(3) | remote_req_nonce(3) */
 #define COMM_REPLY_MSG_SIZE		47	/* encryption_nonce(3) | msg_type(1) | encrypted_req_nonce(3) | encrypted_sessionkey(16) | encrypted_remote_device_id(16) | MIC(8) */
-#define VERIFY_REQUEST_MSG_SIZE	28	/* encryption_nonce(3) | msg_type(1) | encrypted_verify_nonce(3) | padding (12) | MIC(8) */
-#define VERIFY_REPLY_MSG_SIZE	28	/* encryption_nonce(3) | msg_type(1) | encrypted_remote_verify_nonce(3) | padding (12) | MIC(8) */
+#define VERIFY_REQUEST_MSG_SIZE	27	/* encryption_nonce(3) | msg_type(1) | encrypted_verify_nonce(3) | padding (12) | MIC(8) */
+#define VERIFY_REPLY_MSG_SIZE	27	/* encryption_nonce(3) | msg_type(1) | encrypted_remote_verify_nonce(3) | padding (12) | MIC(8) */
+#define UPDATE_MSG_SIZE			31	/* encryption_nonce(3) | msg_type(1) | server_nonce(3) | encrypted_key(16) | MAC(8) */
+#define UPDATE_REQ_MSG_SIZE		27	/* msg_type(1) | req_nonce(3) */
+#define UPDATE_REPLY_MSG_SIZE	34	/* encryption_nonce(3) | msg_type(1) | server_nonce(3) | encrypted_key(16) | encrypted_req_nonce(3) | MAC(8) */
 
 /* ------------------------------------- */
 /* Message variables 					 */
@@ -44,9 +47,12 @@
 /* General definitions					 */
 /* ------------------------------------- */
 #define DEVICE_NOT_FOUND 		-1
+#define SEC_FLAG				1
 #define MAX_DEVICES 			5 /* Max amount of devices a node can communicate with securely */
-#define EDGE_ROUTER_INDEX		0 /* reserved slot in the devices array for central entity */
-#define RESERVED_INDEX			1 /* reserved slot in the devices array for key-negotiation */
+#define CENTRAL_ENTITY_INDEX	0
+#define SERVER_INDEX			1
+#define RESERVED_INDEX			2
+#define NON_RESERVED_INDEXES	3
 
 /* ------------------------------------- */
 /* Session-key status flags			     */
@@ -64,6 +70,8 @@ typedef enum {
 	RESERVED		= 0x04,
 	/**< Key exchange failed before */
 	FAILED			= 0x05,
+	/**< Request key update */
+	UPDATE_KEY 		= 0x06,
 } keyfreshness_flags_type_t;
 
 /* ------------------------------------- */

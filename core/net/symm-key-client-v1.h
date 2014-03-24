@@ -44,15 +44,7 @@
 
 void __attribute__((__far__)) keymanagement_init(void);
 short __attribute__((__far__)) keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8_t *data_len, unsigned short adata_len, uip_ipaddr_t *toaddr, uint16_t toport);
-short __attribute__((__far__)) keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint8_t *data_len, unsigned short adata_len);
-
-//#define ENCRYPT_OK 			0
-//#define ENCRYPT_FAILED 		1
-//#define DECRYPT_OK 			2
-//#define DECRYPT_FAILED 		3
-//#define KEY_REQUEST_TX 		4
-//#define NO_SPACE_FOR_DEVICE 5
-//#define KEY_MANAGE_BUSY 	6
+short __attribute__((__far__)) keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint8_t *data_len, unsigned short adata_len, uint8_t sec_flag);
 
 typedef enum {
   /**< The key management layer encryption was OK. */

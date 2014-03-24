@@ -72,6 +72,8 @@
 #define SEND_TIME		(random_rand() % (SEND_INTERVAL))
 #define MAX_PAYLOAD_LEN		40
 
+#define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
+
 static struct uip_udp_conn *client_conn;
 static uip_ipaddr_t server_ipaddr;
 static uip_ipaddr_t ipaddr_edge;
@@ -88,11 +90,21 @@ static void
 tcpip_handler(void)
 {
   char *str;
+  uint8_t len, result;
 
   if(uip_newdata()) {
-    str = uip_appdata;
-    str[uip_datalen()] = '\0';
-    printf("DATA recv '%s'\n", str);
+	  str = (char *)uip_appdata;
+	  len = uip_datalen() & 0xff;
+
+//#if ENABLE_CCM_APPLICATION & SEC_CLIENT
+//	  result = keymanagement_decrypt_packet(&UIP_IP_BUF->srcipaddr, (uint8_t *)str, &len, 0, 0);
+//#endif
+//
+//	  if(str[3] == 'H') {
+//		  P6OUT ^= 0x01;
+//	  }
+//
+//	  PRINTF("DATA recv '"); for(result=3; result<(len-8); result++) {PRINTF("%c", str[result]);} PRINTF("'\n");
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -194,7 +206,8 @@ set_global_address(void)
 #elif 1
 /* Mode 2 - 16 bits inline */
   //uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
-   uip_ip6addr(&server_ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 4);
+  uip_ip6addr(&server_ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 2);
+  //uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
 #else
 /* Mode 3 - derived from server link-local (MAC) address */
   uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0x0250, 0xc2ff, 0xfea8, 0xcd1a); //redbee-econotag
@@ -223,11 +236,13 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   /* new connection with remote host */
   client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL);
+//  client_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_PORT), NULL); //Server
   if(client_conn == NULL) {
     PRINTF("No UDP connection available, exiting the process!\n");
     PROCESS_EXIT();
   }
   udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
+//  udp_bind(client_conn, UIP_HTONS(UDP_SERVER_PORT));	//Server
 
   PRINTF("Created a connection with the server ");
   PRINT6ADDR(&client_conn->ripaddr);
@@ -238,8 +253,8 @@ PROCESS_THREAD(udp_client_process, ev, data)
   powertrace_sniff(POWERTRACE_ON);
 #endif
 
-
-  xmem_pread(&ipaddr_edge.u8[0], 16, MAC_SECURITY_DATA+16);
+  /* Set output */
+//  P6DIR |= 0x01; //Server
 
   etimer_set(&periodic, SEND_INTERVAL);
   while(1) {
@@ -250,7 +265,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
     else if (ev == sensors_event && data == &button_sensor) {
     	uint8_t data_ptr = 0;
     	char buf[100];
-    	uint8_t data_len = 19;
+    	uint8_t data_len = 17;
 
     	/* Increment push counter */
     	push_cntr++;
@@ -261,12 +276,13 @@ PROCESS_THREAD(udp_client_process, ev, data)
     		PRINTF("Push count: %d\n", push_cntr);
     	}
 
-    	sprintf(&buf[data_ptr], "Toggle light on/off");
+    	sprintf(&buf[data_ptr], "Hello from node 4");
     	uint8_t i;
     	PRINTF("Text:  "); for(i=0; i<data_len; i++) PRINTF("%c", buf[i]); PRINTF("\n");
     	PRINTF("Plain:  "); for(i=0; i<data_len; i++) PRINTF("%02x", buf[i]); PRINTF("\n");
 
 #if ENABLE_CCM_APPLICATION & SEC_CLIENT
+    	//data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_CLIENT_PORT)); // Server
     	data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
     	//uip_udp_packet_sendto(client_conn, &buf[data_ptr], 26, &ipaddr_edge, UIP_HTONS(5444));
 #else

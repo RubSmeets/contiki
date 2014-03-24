@@ -84,7 +84,7 @@ reset_sec_data(uint8_t index)
 	devices[index].remote_nonce_cntr = 0;
 	devices[index].time_last_activity = 0;
 
-	if(index != RESERVED_INDEX) {
+	if(index >= NON_RESERVED_INDEXES) {
 		/* Set as free spot */
 		devices[index].key_freshness = FREE_SPOT;
 		/* Reset device id */
@@ -154,7 +154,7 @@ int __attribute__((__far__))
 remove_least_active_device(void)
 {
 	uint8_t i;
-	int least_active_index = 2;
+	int least_active_index = 3;
 
 	/* Find the longest inactive security device */
 	for(i=2; i<MAX_DEVICES; i++) {
