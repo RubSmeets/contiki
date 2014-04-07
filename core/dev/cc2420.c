@@ -1092,11 +1092,11 @@ setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *p_msg_ctr, u
 
 	nonce[0] =  0x00 | 0x01 | 0x08;
 	memcpy(&nonce[1], &p_address_nonce[8], 8);	/* Setting source address using identifier*/
-	nonce[9] = 0xFF & (*p_msg_ctr>>24);			/* Setting frame counter */
-	nonce[10] = 0xFF & (*p_msg_ctr>>16);
-	nonce[11] = 0xFF & (*p_msg_ctr>>8);
-	nonce[12] = 0xFF & (*p_msg_ctr);
-	nonce[13] = *p_nonce_ctr;			/* Setting key sequence counter (incremented with every new key) */
+	nonce[9] = *p_nonce_ctr;					/* Setting key sequence counter (incremented with every new key) */
+	nonce[10] = 0xFF & (*p_msg_ctr>>24);		/* Setting frame counter */
+	nonce[11] = 0xFF & (*p_msg_ctr>>16);
+	nonce[12] = 0xFF & (*p_msg_ctr>>8);
+	nonce[13] = 0xFF & (*p_msg_ctr);
 	nonce[14] = 0x00;					/* Setting MSB of Block counter to 0x00 to be complained with IEEE802.15.4 */
 	nonce[15] = 0x01;					/* (only set on initiation) */
 

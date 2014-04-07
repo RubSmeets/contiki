@@ -162,14 +162,14 @@ get_decrement_verify_nonce(uint8_t *temp_verify_nonce)
 	uint16_t temp_nonce = verify_nonce;
 
 	if(temp_nonce == 0) {
-		temp_verify_nonce[2] = verify_nonce_cntr-1;
+		temp_verify_nonce[0] = verify_nonce_cntr-1;
 		temp_nonce = 0xffff;
 	} else {
 		temp_nonce--;
-		temp_verify_nonce[2] = verify_nonce_cntr;
+		temp_verify_nonce[0] = verify_nonce_cntr;
 	}
 
-	set16(temp_verify_nonce, 0, temp_nonce);
+	set16(temp_verify_nonce, 1, temp_nonce);
 }
 /*-----------------------------------------------------------------------------------*/
 void __attribute__((__far__))
@@ -335,8 +335,8 @@ keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8
 	uip_ds6_select_src(&curr_ip, toaddr);
 
 	/* Extend data packet with nonce */
-	for(i=0; i < MSG_NONCE_SIZE; i++) tempbuf[i] = (devices[dest_index].msg_cntr >> (((MSG_NONCE_SIZE-1)-i)*8)) & 0xff;
-	tempbuf[MSG_NONCE_SIZE] = devices[dest_index].nonce_cntr;
+	for(i=1; i < (MSG_NONCE_SIZE+1); i++) tempbuf[i] = (devices[dest_index].msg_cntr >> ((MSG_NONCE_SIZE-i)*8)) & 0xff;
+	tempbuf[0] = devices[dest_index].nonce_cntr;
 
 	/* Set Associated data */
 	adata_len = adata_len + NONCE_SIZE;
@@ -406,8 +406,8 @@ keymanagement_decrypt_packet(uip_ipaddr_t *remote_device_id, uint8_t *data, uint
 	if(devices[src_index].key_freshness == EXPIRED) return KEY_REQUEST_TX;
 
 	/* Check nonce and message counter values */
-	for(i=0; i < MSG_NONCE_SIZE; i++) src_msg_cntr |= ((uint16_t)data[i] << (((MSG_NONCE_SIZE-1)-i)*8));
-	src_nonce_cntr = data[MSG_NONCE_SIZE];
+	for(i=1; i < (MSG_NONCE_SIZE+1); i++) src_msg_cntr |= ((uint16_t)data[i] << ((MSG_NONCE_SIZE-i)*8));
+	src_nonce_cntr = data[0];
 
 	PRINTFDEBUG("dec_nonce %d dec_msgcntr %d\n", src_nonce_cntr, src_msg_cntr);
 
@@ -737,8 +737,8 @@ send_key_exchange_packet(void)
 static void
 init_reply_message(void)
 {
-	set16(keypacketbuf, 1, request_nonce);
-	keypacketbuf[3] = request_nonce_cntr;
+	set16(keypacketbuf, 2, request_nonce);
+	keypacketbuf[1] = request_nonce_cntr;
 	tot_len = INIT_REPLY_MSG_SIZE;
 }
 
@@ -760,8 +760,8 @@ comm_request_message(void)
 	/* Copy remote ID */
 	memcpy(&keypacketbuf[17], &devices[RESERVED_INDEX].remote_device_id.u8[0], DEVICE_ID_SIZE);
 	/* Copy request nonce */
-	set16(keypacketbuf, 33, request_nonce);
-	keypacketbuf[35] = request_nonce_cntr;
+	set16(keypacketbuf, 34, request_nonce);
+	keypacketbuf[33] = request_nonce_cntr;
 	/* Copy remote request nonce */
 	memcpy(&keypacketbuf[36], remote_request_nonce, (KEY_NONCE_SIZE+NONCE_CNTR_SIZE));
 
@@ -777,8 +777,8 @@ void __attribute__((__far__))
 verify_request_message(void)
 {
 	/* Copy verify nonce */
-	set16(keypacketbuf, 1, verify_nonce);
-	keypacketbuf[3] = verify_nonce_cntr;
+	set16(keypacketbuf, 2, verify_nonce);
+	keypacketbuf[1] = verify_nonce_cntr;
 	/* Pad buf with zero for min block size AES*/
 	memset(&keypacketbuf[4], 0, 12);
 
@@ -794,16 +794,16 @@ void __attribute__((__far__))
 verify_reply_message(uint8_t* remote_nonce)
 {
 	uint16_t temp_rverify_nonce;
-	temp_rverify_nonce = get16(remote_nonce, 0);
+	temp_rverify_nonce = get16(remote_nonce, 1);
 
 	/* Subtract 1 from the remote verify nonce */
 	if(temp_rverify_nonce == 0) {
 		temp_rverify_nonce = 0xffff;
-		remote_nonce[2]--;
+		remote_nonce[0]--;
 	} else {
 		temp_rverify_nonce--;
 	}
-	set16(remote_nonce, 0, temp_rverify_nonce);
+	set16(remote_nonce, 1, temp_rverify_nonce);
 
 	/* Copy remote verify nonce */
 	memcpy(&keypacketbuf[1], remote_nonce, (KEY_NONCE_SIZE+NONCE_CNTR_SIZE));
@@ -1141,7 +1141,7 @@ parse_comm_reply_message(uint8_t *data)
 	temp_request_nonce[2] = request_nonce_cntr;
 
 	/* Check request nonce */
-	if(memcmp(&data[REQUEST_NONCE_OFFSET], &temp_request_nonce[0], 3) != 0) {
+	if(memcmp(&data[REQUEST_NONCE_OFFSET], &temp_request_nonce[0], (KEY_NONCE_SIZE+NONCE_CNTR_SIZE)) != 0) {
 		/* Doesn't belong with current request - replay message */
 		PRINTF("key: wrong req_nonce\n");
 		return 0;
