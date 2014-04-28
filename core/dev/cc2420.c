@@ -1063,7 +1063,7 @@ cc2420_initLinkLayerSec(void)
 }
 #endif
 /*---------------------------------------------------------------------------*/
-#if ENABLE_CCM_APPLICATION
+#if ENABLE_CCM_APPLICATION | 1
 /*---------------------------------------------------------------------------*/
 static void
 setAssociatedData(unsigned short RX_nTX, unsigned short hdrlen)
@@ -1080,6 +1080,7 @@ static void
 setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *p_msg_ctr, uint8_t *p_nonce_ctr)
 {
 	uint8_t nonce[16];
+	uint16_t ramAddress = 0;
 	//uint8_t ieee_addr_temp[8];
 
 	/* Set flags:
@@ -1104,8 +1105,10 @@ setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *p_msg_ctr, u
 	PRINTFSEC("READ NONCE: "); for(i=0; i<16; i++) PRINTFSEC("%.2X ",nonce[i]); PRINTFSEC("\n");
 
 	/* Write Tx Nonce */
-	if(RX_nTX) 	CC2420_WRITE_RAM_REV(nonce, CC2420RAM_RXNONCE, 16);
-	else		CC2420_WRITE_RAM_REV(nonce, CC2420RAM_TXNONCE, 16);
+	if(RX_nTX) 	ramAddress = CC2420RAM_RXNONCE;
+	else		ramAddress = CC2420RAM_TXNONCE;
+
+	CC2420_WRITE_RAM_REV(nonce, ramAddress, 16);
 }
 /*---------------------------------------------------------------------------*/
 int __attribute__((__far__))

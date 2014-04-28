@@ -82,7 +82,7 @@ extern uint8_t potentialHello;
 int __attribute__((__far__)) cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr, uint8_t *src_nonce_cntr, uint8_t *data_len, unsigned short adata_len);
 #endif
 
-#if ENABLE_CCM_APPLICATION
+#if ENABLE_CCM_APPLICATION | 1
 #define APP_MIC_LEN 		8
 #define MSG_NONCE_SIZE		2	/* Size in bytes */
 #define NONCE_SIZE			3	/* Size of the nonce+nonce counter */

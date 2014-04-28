@@ -60,7 +60,7 @@
 
 #define UDP_EXAMPLE_ID  190
 
-#define DEBUG DEBUG_PRINT
+#define DEBUG DEBUG_NONE //DEBUG_PRINT
 #include "net/uip-debug.h"
 
 #ifndef PERIOD
@@ -111,6 +111,148 @@ tcpip_handler(void)
 static void
 send_packet(void *ptr)
 {
+	uint16_t msg_cnt = 44;
+	uint8_t nonce_cnt = 2;
+	uint8_t data_len = 1;
+	char buf[1];
+
+	//sprintf(&buf[0], "Hello dit is een test bericht van ongeveer 100 bytes lang met associated data van 20 bytes lang dddd en nog eens 19 er ");
+	sprintf(&buf[0], "H");
+
+	//cc2420_encrypt_ccm((uint8_t *)buf, &server_ipaddr.u8[0], &msg_cnt, &nonce_cnt, &data_len, 50);
+	//cc2420_decrypt_ccm((uint8_t *)buf, &server_ipaddr.u8[0], &msg_cnt, &nonce_cnt, &data_len, 0);
+
+#if MEASURE_ENERGY
+	rtimer_clock_t t1, t2;
+	uint8_t i;
+	rtimer_clock_t tbuf[50];
+	uint8_t index = 0;
+	uint8_t count[5] = {0, 0, 0, 0 ,0};
+#define FINE_STEP 636 /* nano seconds -> 48 times write 2-byte to variable in 1/32768Hz interval, gives 1/(32768Hz*48) */
+#define NORMAL_STEP 30518 /* nano seconds -> 1/32768Hz */
+
+	uint32_t difference = 0;
+	uint32_t normalTime = 0;
+	uint32_t fineTime = 0;
+	uint32_t totalTime = 0;
+
+	/* Energy measurement variables*/
+	struct energy_time {
+		unsigned short source;
+		long cpu;
+		long lpm;
+		long transmit;
+		long listen;
+	};
+
+	static struct energy_time diff;
+	static struct energy_time last;
+	/*************************/
+
+	/* update all counters */
+	energest_flush();
+
+	last.cpu = energest_type_time(ENERGEST_TYPE_CPU);
+	last.lpm = energest_type_time(ENERGEST_TYPE_LPM);
+	last.transmit = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+	last.listen = energest_type_time(ENERGEST_TYPE_LISTEN);
+	t1=RTIMER_NOW();
+
+	/************** Start what we want to measure ********************/
+	//radio->on();
+	/* Encrypt message */
+	keymanagement_decrypt_packet(&server_ipaddr, (uint8_t *) buf, &data_len, 47, 0);
+
+	/************** Finish what we want to measure ********************/
+
+
+	tbuf[0] = TAR;
+	tbuf[1] = TAR;
+	tbuf[2] = TAR;
+	tbuf[3] = TAR;
+	tbuf[4] = TAR;
+	tbuf[5] = TAR;
+	tbuf[6] = TAR;
+	tbuf[7] = TAR;
+	tbuf[8] = TAR;
+	tbuf[9] = TAR;
+	tbuf[10] = TAR;
+	tbuf[11] = TAR;
+	tbuf[12] = TAR;
+	tbuf[13] = TAR;
+	tbuf[14] = TAR;
+	tbuf[15] = TAR;
+	tbuf[16] = TAR;
+	tbuf[17] = TAR;
+	tbuf[18] = TAR;
+	tbuf[19] = TAR;
+	tbuf[20] = TAR;
+	tbuf[21] = TAR;
+	tbuf[22] = TAR;
+	tbuf[23] = TAR;
+	tbuf[24] = TAR;
+	tbuf[25] = TAR;
+	tbuf[26] = TAR;
+	tbuf[27] = TAR;
+	tbuf[28] = TAR;
+	tbuf[29] = TAR;
+	tbuf[30] = TAR;
+	tbuf[31] = TAR;
+	tbuf[32] = TAR;
+	tbuf[33] = TAR;
+	tbuf[34] = TAR;
+	tbuf[35] = TAR;
+	tbuf[36] = TAR;
+	tbuf[37] = TAR;
+	tbuf[38] = TAR;
+	tbuf[39] = TAR;
+	tbuf[40] = TAR;
+	tbuf[41] = TAR;
+	tbuf[42] = TAR;
+	tbuf[43] = TAR;
+	tbuf[44] = TAR;
+	tbuf[45] = TAR;
+	tbuf[46] = TAR;
+	tbuf[47] = TAR;
+	tbuf[48] = TAR;
+	tbuf[49] = TAR;
+
+	t2=RTIMER_NOW();
+
+	diff.cpu = energest_type_time(ENERGEST_TYPE_CPU) - last.cpu;
+	diff.lpm = energest_type_time(ENERGEST_TYPE_LPM) - last.lpm;
+	diff.transmit = energest_type_time(ENERGEST_TYPE_TRANSMIT) - last.transmit;
+	diff.listen = energest_type_time(ENERGEST_TYPE_LISTEN) - last.listen;
+
+	PRINTF("CPU=%lu, LPM=%lu, TRANSMIT=%lu, LISTEN=%lu, TICKS=%u\n", diff.cpu, diff.lpm, diff.transmit, diff.listen, t2-t1);
+
+
+	PRINTF("t1 time: %u\n", t1);
+	for(i=0; i<(50-1); i++) {
+		if(tbuf[i] == tbuf[i+1]) {
+			count[index]++;
+		} else {
+			index++;
+		}
+	}
+
+	difference = (tbuf[0]-1) - t1;
+	normalTime = difference*NORMAL_STEP;
+	fineTime = FINE_STEP*(48 - count[0]);
+	totalTime = normalTime + fineTime;
+
+	PRINTF("Time in nano seconds: %lu\n", totalTime);
+
+	PRINTF("counts: ");
+	for(i=0; i<5; i++) {
+		PRINTF("%d ", count[i]);
+		count[i] = 0;
+	}
+	PRINTF("\n");
+
+#endif
+
+
 /*  static int seq_id;
   char buf[MAX_PAYLOAD_LEN];
   uint8_t data_ptr = 0;
@@ -206,8 +348,8 @@ set_global_address(void)
 #elif 1
 /* Mode 2 - 16 bits inline */
   //uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
-  uip_ip6addr(&server_ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 2);
-  //uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
+  //uip_ip6addr(&server_ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 2);
+  uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
 #else
 /* Mode 3 - derived from server link-local (MAC) address */
   uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0x0250, 0xc2ff, 0xfea8, 0xcd1a); //redbee-econotag
@@ -282,8 +424,9 @@ PROCESS_THREAD(udp_client_process, ev, data)
     	PRINTF("Plain:  "); for(i=0; i<data_len; i++) PRINTF("%02x", buf[i]); PRINTF("\n");
 
 #if ENABLE_CCM_APPLICATION & SEC_CLIENT
+    	send_packet(NULL);
     	//data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_CLIENT_PORT)); // Server
-    	data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+    	//data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
     	//uip_udp_packet_sendto(client_conn, &buf[data_ptr], 26, &ipaddr_edge, UIP_HTONS(5444));
 #else
     	uip_udp_packet_sendto(client_conn, &buf[data_ptr], 26, &server_ipaddr, UIP_HTONS(UDP_CLIENT_PORT));

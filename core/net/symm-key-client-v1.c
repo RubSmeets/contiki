@@ -13,9 +13,9 @@
 
 #include <string.h>
 
-#if ENABLE_CCM_APPLICATION & SEC_CLIENT | 1
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT
 
-#define DEBUG_SEC 1
+#define DEBUG_SEC 0
 #if DEBUG_SEC
 #include <stdio.h>
 static const char * printstate[10] = {
