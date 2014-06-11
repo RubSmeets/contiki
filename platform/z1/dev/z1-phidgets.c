@@ -40,9 +40,31 @@
 #include "contiki.h"
 #include "lib/sensors.h"
 #include "dev/z1-phidgets.h"
+#include "dev/hwconf.h"
+#include "isr_compat.h"
+
+#define DEBUG 1
+#if DEBUG
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#else
+#define PRINTF(...)
+#endif
 
 static uint8_t adc_on;
 static uint8_t active;
+
+HWCONF_ADC_IRQ(PHIDGET, ADC7);
+/*---------------------------------------------------------------------------*/
+//ISR(ADC12, adc_service_routine)
+//{
+//	if(PHIDGET_CHECK_IRQ()) {
+//		sensors_changed(&phidgets);
+//		LPM4_EXIT;
+//	}
+//
+//	PHIDGET_CLEAR_IRQ_FLAG(); /* Clear Interrupt flag */
+//}
 /*---------------------------------------------------------------------------*/
 static void
 sensors_activate(uint8_t type)
@@ -56,10 +78,20 @@ sensors_activate(uint8_t type)
     P6OUT = 0x00;
     P6SEL |= 0x8b; /* bit 7 + 3 + 1 + 0 */
 
+    /* Enable ADC12CLK on P2.6 */
+    //P2SEL |= (1<<6);
+    //P2DIR |= (1<<6);
+
     /* if nothing was started before, start up the ADC system */
     /* Set up the ADC. */
-    ADC12CTL0 = REF2_5V + SHT0_6 + SHT1_6 + MSC; /* Setup ADC12, ref., sampling time */
-    ADC12CTL1 = SHP + CONSEQ_3 + CSTARTADD_0;	/* Use sampling timer, repeat-sequenc-of-channels */
+    //ADC12CTL0 = REF2_5V + SHT0_6 + SHT1_6 + MSC; /* Setup ADC12, ref., sampling time */
+    ADC12CTL0 = REF2_5V + SHT0_12 + SHT1_12 + MSC; /* Setup ADC12, ref., sampling time (96 cycles + 13 cycles conversion time + tsync) (9905 samples) */
+    //ADC12CTL1 = SHP + CONSEQ_3 + CSTARTADD_0;	/* Use sampling timer, repeat-sequenc-of-channels */
+    ADC12CTL1 = SHP + CONSEQ_2 + CSTARTADD_3;	/* Use sampling timer, repeat-single-sequenc */
+
+    /* Enable interrupt */
+    PHIDGET_ENABLE_IRQ();
+
     /* convert up to MEM4 */
     ADC12MCTL4 |= EOS;
 
@@ -149,5 +181,6 @@ configure(int type, int c)
   }
   return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 SENSORS_SENSOR(phidgets, "Phidgets", value, configure, status);

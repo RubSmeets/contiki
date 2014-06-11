@@ -129,6 +129,7 @@ typedef unsigned long off_t;
 /* Use 8th 64k of external flash for nonce counter application layer */
 #define APP_NONCE_DATA			(7 * XMEM_ERASE_UNIT_SIZE)		/* format: | request_nonce(MSB(1),LSB(1)) | reply_nonce(MSB(1),LSB(1)) | sensor nonce cntr (1) | */
 
+#define AUDIO_DATA				(4 * XMEM_ERASE_UNIT_SIZE)
 
 #define CFS_RAM_CONF_SIZE 4096
 

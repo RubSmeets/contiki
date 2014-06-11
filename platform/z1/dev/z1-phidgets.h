@@ -44,6 +44,8 @@
 #define PHIDGET3V_1 2
 #define PHIDGET3V_2 3
 
+#define ADC7 	3
+
 extern const struct sensors_sensor phidgets;
 
 #endif /* Z1_PHIDGETS_H_ */

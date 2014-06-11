@@ -76,19 +76,13 @@ int cc2420_get_txpower(void);
 #if ENABLE_CBC_LINK_SECURITY
 #define MIC_LEN 8			 /**< Length of the CCM MIC in bytes */
 #define CC2420RAM_SEC_LEN 16 /**< Length of security data in CC2420 RAM registers */
-
-extern uint8_t potentialHello;
-
-int __attribute__((__far__)) cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr, uint8_t *src_nonce_cntr, uint8_t *data_len, unsigned short adata_len);
-#endif
-
-#if ENABLE_CCM_APPLICATION | 1
 #define APP_MIC_LEN 		8
 #define MSG_NONCE_SIZE		2	/* Size in bytes */
 #define NONCE_SIZE			3	/* Size of the nonce+nonce counter */
 
-//typedef uint16_t msgnonce_type_t;
+extern uint8_t potentialHello;
 
+int __attribute__((__far__)) cc2420_decrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *src_msg_cntr, uint8_t *src_nonce_cntr, uint8_t *data_len, unsigned short adata_len);
 int __attribute__((__far__)) cc2420_encrypt_ccm(uint8_t *data, uint8_t *address_nonce, uint16_t *msg_cntr, uint8_t *nonce_cntr, uint8_t *data_len, unsigned short adata_len);
 #endif
 
