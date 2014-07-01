@@ -139,7 +139,7 @@ static int we_are_receiving_burst = 0;
 #ifdef CONTIKIMAC_CONF_CCA_COUNT_MAX_TX
 #define CCA_COUNT_MAX_TX                   (CONTIKIMAC_CONF_CCA_COUNT_MAX_TX)
 #else
-#define CCA_COUNT_MAX_TX                   6
+#define CCA_COUNT_MAX_TX                   2 //6
 #endif
 
 /* CCA_CHECK_TIME is the time it takes to perform a CCA check. */

@@ -55,10 +55,11 @@
 
 #include <stdio.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINTF(...)
+#define PRINTFO(...) printf(__VA_ARGS__)
 #else /* DEBUG */
 #define PRINTF(...)
 #endif /* DEBUG */
@@ -386,6 +387,7 @@ send_packet(mac_callback_t sent, void *ptr)
       memb_free(&neighbor_memb, n);
     }
     PRINTF("csma: could not allocate packet, dropping packet\n");
+    PRINTFO("drop\n");
   } else {
     PRINTF("csma: could not allocate neighbor, dropping packet\n");
   }

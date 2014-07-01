@@ -84,12 +84,12 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG_SEC 0
+#define DEBUG_SEC 1
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
-#define PRINTF(...) printf(__VA_ARGS__)
-#define PRINTDEBUG(...)
+#define PRINTF(...)
+#define PRINTDEBUG(...) printf(__VA_ARGS__)
 #else
 #define PRINTFSEC(...) do {} while (0)
 #define PRINTF(...)
@@ -669,6 +669,7 @@ int
 cc2420_interrupt(void)
 {
   CC2420_CLEAR_FIFOP_INT();
+  PRINTDEBUG("2\n");
   process_poll(&cc2420_process);
 
   last_packet_timestamp = cc2420_sfd_start_time;
@@ -1061,9 +1062,6 @@ cc2420_initLinkLayerSec(void)
 
 	PRINTF("cc2420: Init CBC MAC complete\n");
 }
-#endif
-/*---------------------------------------------------------------------------*/
-#if ENABLE_CCM_APPLICATION | 1
 /*---------------------------------------------------------------------------*/
 static void
 setAssociatedData(unsigned short RX_nTX, unsigned short hdrlen)

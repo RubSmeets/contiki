@@ -68,6 +68,8 @@ PROCESS_THREAD(measure_process, ev, data)
 		      PRINTF("C: %ld\n", counter);
 		      PRINTF("P: %d\n", process_cnt);
 		      process_cnt = 0;
+
+		      NETSTACK_RADIO.send("testeddsdfdedssddfddss", 22);
 		      //dac_setValue(phidgets.value(PHIDGET3V_2), Z1_DAC_0);
 		}
 		counter = 0;

@@ -1674,7 +1674,6 @@ input(void)
     default:
       break;
   }
-  PRINTFDEBUG("six: hier1\n");
   /* We are currently reassembling a packet, but have just received the first
    * fragment of another packet. We can either ignore it and hope to receive
    * the rest of the under-reassembly packet fragments, or we can discard the

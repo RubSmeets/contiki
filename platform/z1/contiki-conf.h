@@ -61,7 +61,7 @@
 
 #if SEC_NODE_ENABLED | SEC_BORDER_ENABLED
 #define ENABLE_CBC_LINK_SECURITY 1
-#define ENABLE_CCM_APPLICATION	 0
+#define ENABLE_CCM_APPLICATION	 1
 #endif
 
 /* Specify a minimum packet size for 6lowpan compression to be
@@ -77,7 +77,7 @@
 #define CXMAC_CONF_ANNOUNCEMENTS         0
 #define XMAC_CONF_ANNOUNCEMENTS          0
 
-#define QUEUEBUF_CONF_NUM                4 
+#define QUEUEBUF_CONF_NUM                4//4
 
 
 #else /* WITH_UIP6 */

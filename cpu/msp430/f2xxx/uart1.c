@@ -108,7 +108,8 @@ void
 uart1_init(unsigned long ubr)
 {
   /* RS232 */
-  P3SEL |= 0x30;                            /* P3.4,5 = USCI_A0 TXD/RXD */
+  //P3SEL |= 0x30;                            /* P3.4,5 = USCI_A0 TXD/RXD */
+  P3SEL |= 0xC0;                            /* P3.6,7 = USCI_A1 TXD/RXD */
   UCA0CTL1 |= UCSSEL_2;                     /* CLK = SMCLK */
   UCA0BR0 = 0x45;                           /* 8MHz/115200 = 69 = 0x45 */
   UCA0BR1 = 0x00;
