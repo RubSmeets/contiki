@@ -80,11 +80,13 @@ uint8_t i2c_busy(void);
 #endif /* I2C_CONF_RX_WITH_INTERRUPT */
 
 
-#if 0
+#if 1
 #include <stdio.h>
-#define PRINTFDEBUG(...) printf(__VA_ARGS__)
+#define PRINTFDEBUG(...)
+#define PRINTF(...) printf(__VA_ARGS__)
 #else
 #define PRINTFDEBUG(...)
+#define PRINTF(...)
 #endif
 
 #endif    /* #ifdef I2CMASTER_H_ */

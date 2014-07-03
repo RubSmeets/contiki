@@ -39,6 +39,14 @@
 #include "lib/ringbuf.h"
 #include "isr_compat.h"
 
+#define DEBUG 1
+#if DEBUG
+#include <stdio.h>
+#define PRINTDEBUG(...) printf(__VA_ARGS__)
+#else
+#define PRINTDEBUG(...)
+#endif
+
 static int (*uart1_input_handler)(unsigned char c);
 
 static volatile uint8_t transmitting;
@@ -46,7 +54,7 @@ static volatile uint8_t transmitting;
 #ifdef UART1_CONF_TX_WITH_INTERRUPT
 #define TX_WITH_INTERRUPT UART1_CONF_TX_WITH_INTERRUPT
 #else /* UART1_CONF_TX_WITH_INTERRUPT */
-#define TX_WITH_INTERRUPT 1
+#define TX_WITH_INTERRUPT 0
 #endif /* UART1_CONF_TX_WITH_INTERRUPT */
 
 #if TX_WITH_INTERRUPT
@@ -60,7 +68,7 @@ static uint8_t txbuf_data[TXBUFSIZE];
 uint8_t
 uart1_active(void)
 {
-  return (UCA0STAT & UCBUSY) | transmitting;
+  return (UCA1STAT & UCBUSY) | transmitting;
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -84,16 +92,16 @@ uart1_writeb(unsigned char c)
      the first byte into the UART. */
   if(transmitting == 0) {
     transmitting = 1;
-    UCA0TXBUF = ringbuf_get(&txbuf);
+    UCA1TXBUF = ringbuf_get(&txbuf);
   }
 
 #else /* TX_WITH_INTERRUPT */
 
   /* Loop until the transmission buffer is available. */
-  while(!(IFG2 & UCA0TXIFG));
+  while(!(UC1IFG & UCA1TXIFG));
 
   /* Transmit the data. */
-  UCA0TXBUF = c;
+  UCA1TXBUF = c;
 #endif /* TX_WITH_INTERRUPT */
 }
 /*---------------------------------------------------------------------------*/
@@ -107,16 +115,28 @@ uart1_writeb(unsigned char c)
 void
 uart1_init(unsigned long ubr)
 {
-  /* RS232 */
-  //P3SEL |= 0x30;                            /* P3.4,5 = USCI_A0 TXD/RXD */
-  P3SEL |= 0xC0;                            /* P3.6,7 = USCI_A1 TXD/RXD */
-  UCA0CTL1 |= UCSSEL_2;                     /* CLK = SMCLK */
-  UCA0BR0 = 0x45;                           /* 8MHz/115200 = 69 = 0x45 */
-  UCA0BR1 = 0x00;
-  UCA0MCTL = UCBRS2;                        /* Modulation UCBRSx = 4 */
-  UCA0CTL1 &= ~UCSWRST;                     /* Initialize USCI state machine */
+	/* RS232 */
+	UCA1CTL1 |= UCSWRST;            /* Hold peripheral in reset state */
+	UCA1CTL1 |= UCSSEL_2;           /* CLK = SMCLK */
 
-  transmitting = 0;
+	P3SEL |= 0xC0;                  /* P3.6,7 = USCI_A1 TXD/RXD */
+	UCA1BR0 = 0x41;                 /* 8MHz/9600 = 833 = 0x341 */
+	UCA1BR1 = 0x03;
+	UCA1MCTL = UCBRS_2;              /* Modulation UCBRSx = 2 */
+
+	transmitting = 0;
+
+	/* XXX Clear pending interrupts before enable */
+	UC1IFG &= ~UCA1RXIFG;
+	UC1IFG &= ~UCA1TXIFG;
+	UCA1CTL1 &= ~UCSWRST;           /* Initialize USCI state machine */
+
+	UC1IE |= UCA1RXIE;              /* Enable UCA1 RX interrupt */
+  /* Enable USCI_A0 TX interrupts (if TX_WITH_INTERRUPT enabled) */
+#if TX_WITH_INTERRUPT
+  ringbuf_init(&txbuf, txbuf_data, sizeof(txbuf_data));
+  UC1IE |= UCA1TXIE;                /* Enable UCA1 TX interrupt */
+#endif /* TX_WITH_INTERRUPT */
  
 }
 /*---------------------------------------------------------------------------*/
@@ -125,16 +145,25 @@ ISR(USCIAB1RX, uart1_rx_interrupt)
   uint8_t c;
   ENERGEST_ON(ENERGEST_TYPE_IRQ);
 
-  /* Check status register for receive errors. */
-  if(UCA0STAT & UCRXERR) {
-    c = UCA0RXBUF;   /* Clear error flags by forcing a dummy read. */
-  } else {
-    c = UCA0RXBUF;
-    if(uart1_input_handler != NULL) {
-      if(uart1_input_handler(c)) {
-	LPM4_EXIT;
-      }
-    }
+  /* I2C interrupt */
+  if(UC1IFG & UCB1RXIFG) {
+	  if(UCB1STAT & UCNACKIFG) {
+	    UCB1CTL1 |= UCTXSTP;
+	    UCB1STAT &= ~UCNACKIFG;
+	  }
+  /* UART1 interrupt */
+  } else if(UC1IFG & UCA1RXIFG) {
+	  /* Check status register for receive errors. */
+	  if(UCA1STAT & UCRXERR) {
+		c = UCA1RXBUF;   /* Clear error flags by forcing a dummy read. */
+	  } else {
+		c = UCA1RXBUF;
+		if(uart1_input_handler != NULL) {
+		  if(uart1_input_handler(c)) {
+		LPM4_EXIT;
+		  }
+		}
+	  }
   }
   ENERGEST_OFF(ENERGEST_TYPE_IRQ);
 }
@@ -143,11 +172,11 @@ ISR(USCIAB1RX, uart1_rx_interrupt)
 ISR(USCIAB1TX, uart1_tx_interrupt)
 {
   ENERGEST_ON(ENERGEST_TYPE_IRQ);
-  if(IFG2 & UCA0TXIFG) {
+  if(UC1IFG & UCA1TXIFG) {
     if(ringbuf_elements(&txbuf) == 0) {
       transmitting = 0;
     } else {
-      UCA0TXBUF = ringbuf_get(&txbuf);
+      UCA1TXBUF = ringbuf_get(&txbuf);
     }
   }
   
