@@ -84,7 +84,7 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG_SEC 1
+#define DEBUG_SEC 0
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
