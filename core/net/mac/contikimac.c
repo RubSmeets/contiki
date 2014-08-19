@@ -271,16 +271,6 @@ static struct timer broadcast_rate_timer;
 static int broadcast_rate_counter;
 #endif /* CONTIKIMAC_CONF_BROADCAST_RATE_LIMIT */
 
-#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
-#include "dev/cc2420.h"
-#include "net/sec-arp-client.h"
-#endif
-
-#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
-#include "dev/cc2420.h"
-#include "net/sec-arp-server.h"
-#endif
-
 /*---------------------------------------------------------------------------*/
 static void
 on(void)
@@ -572,13 +562,6 @@ send_packet(mac_callback_t mac_callback, void *mac_callback_ptr,
     is_broadcast = 1;
     PRINTDEBUG("contikimac: send broadcast\n");
 
-#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
-    if(!hasKeys) {
-    	PRINTFSEC("contikimac: send broadcast hello\n");
-    	packetbuf_clear();
-    }
-#endif
-
     if(broadcast_rate_drop()) {
       return MAC_TX_COLLISION;
     }
@@ -625,13 +608,6 @@ send_packet(mac_callback_t mac_callback, void *mac_callback_ptr,
   }
   hdrlen += sizeof(struct hdr);
 #else
-#if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
-  if(!hasKeys) {
-	 /* Create hello packet */
-	 create_hello((uint8_t *)packetbuf_dataptr());
-	 packetbuf_set_datalen(HELLO_PACKETSIZE);
-  }
-#endif
   /* Create the MAC header for the data packet. */
   hdrlen = NETSTACK_FRAMER.create();
   if(hdrlen < 0) {
@@ -994,25 +970,6 @@ input_packet(void)
         off();
         ctimer_stop(&ct);
       }
-
-#if ENABLE_CBC_LINK_SECURITY & SEC_EDGE
-      /* Check if we received key request packet BEFORE SEQ CHECKER!! */
-	  if(potentialHello == 1) {
-		  /* Parse input */
-		  forward_hello_packet((uint8_t *)packetbuf_dataptr(), packetbuf_datalen(), &packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[0]);
-		  return;
-	  }
-#elif ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
-      /* Check if we received key request packet BEFORE SEQ CHECKER!! */
-	  if(!hasKeys) {
-		  if(potentialHello == 1) {
-			  /* Parse input */
-			  parse_hello_reply((uint8_t *)packetbuf_dataptr(), packetbuf_datalen());
-		  } else {
-			  return;
-		  }
-	  }
-#endif
 
       /* Check for duplicate packet. */
       if(mac_sequence_is_duplicate()) {

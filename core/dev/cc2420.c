@@ -84,7 +84,7 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG_SEC 1
+#define DEBUG_SEC 0
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
@@ -157,7 +157,6 @@ static int cc2420_cca(void);
 #define TX 0
 
 static uint8_t mic_len;
-uint8_t potentialHello;
 
 static void setAssociatedData(unsigned short RX_nTX, unsigned short hdrlen);
 static void setNonce(unsigned short RX_nTX, uint8_t *p_address_nonce, uint32_t *msg_ctr, uint8_t *p_nonce_ctr);
@@ -769,7 +768,6 @@ cc2420_read(void *buf, unsigned short bufsize)
    * Check if we are receiving an ACK-packet. They don't have
    * a MIC message appended.
    */
-  potentialHello = 0;
 
   getrxdata(buf, len - AUX_LEN);
   pbuf = buf;
@@ -783,15 +781,10 @@ cc2420_read(void *buf, unsigned short bufsize)
   if(len != (ACK_PACKET_SIZE + AUX_LEN)) {
 	  if(pbuf[len-(AUX_LEN+1)] != 0x00)
 	  {
-		  if((hasKeys == 0) && ((len - AUX_LEN - mic_len) == HELLO_REPLY_PACKETSIZE)) {
-			  PRINTF("cc2420: Potential hello reply\n");
-			  potentialHello = 1;
-		  } else {
-			  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
-			  flushrx();
-			  RELEASE_LOCK();
-			  return 0;
-		  }
+		  PRINTF("cc2420: FAILED TO AUTHENTICATE\n");
+		  flushrx();
+		  RELEASE_LOCK();
+		  return 0;
 	  }
 	  PRINTF("cc2420: SUCCESS\n");
   }
@@ -1044,9 +1037,6 @@ cc2420_initLinkLayerSec(void)
 
 	/* Enable key material */
 	mic_len = MIC_LEN;
-
-	/* Hello packet identifier */
-	potentialHello = 0;
 
 	/* Set security control register 0 */
 	reg = getreg(CC2420_SECCTRL0);

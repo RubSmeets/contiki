@@ -8,6 +8,7 @@
 #include "net/sec_data.h"
 #include "net/rime/rimeaddr.h"
 #include "net/uip-ds6.h"
+#include "dev/slip.h"
 #include "dev/cc2420.h"
 #include "dev/xmem.h"
 #include "dev/leds.h"
@@ -32,6 +33,8 @@
 uint8_t hasKeys;
 struct  device_sec_data devices[MAX_DEVICES];
 
+static short parse_hello_reply(uint8_t *buf);
+static void create_hello(void);
 static void  init_security_data(uint8_t *buf);
 
 /*-----------------------------------------------------------------------------------*/
@@ -41,6 +44,13 @@ static void  init_security_data(uint8_t *buf);
  *
  */
 /*-----------------------------------------------------------------------------------*/
+static void
+slip_input_callback(void) {
+	PRINTF("It works!\n");
+	parse_hello_reply(&uip_buf[0]);
+}
+
+
 void __attribute__((__far__))
 sec_arp_init(void)
 {
@@ -54,9 +64,16 @@ sec_arp_init(void)
 	sum = 0;
 	for(i=KEY_SIZE; i>0; i--) {sum |= temp_buf[i-1];}
 	if(!(sum))	{
+		/* Init slip connection */
+		slip_arch_init(BAUD2UBR(115200));
+		PRINTF("sec-arp: Start slip process\n");
+		process_start(&slip_process, NULL);
+		slip_set_input_callback(slip_input_callback);
+
+		/* Send hello packet */
+		create_hello();
+
 		hasKeys = 0;
-		leds_on(LEDS_BLUE);
-		PRINTF("No keys\n");
 	} else {
 		PRINTF("sec-arp: Key OK\n");
 
@@ -70,73 +87,74 @@ sec_arp_init(void)
 /**
  * Create Hello packet CODE
  *
- * format: | message_type(1) | device id(16) |
+ * format: | message_type(1) | operation(1) | device id(16) | device MAC (8) |
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
-create_hello(uint8_t *buf)
+static void
+create_hello(void)
 {
+	hello_packet_t packet;
 	uint8_t state, i;
+	uint8_t buf[HELLO_PACKETSIZE];
 
-	/* hello-packet header */
-	buf[0] = HELLO_PACKET;
+	/* Construct packet */
+	packet.type = HELLO_PACKET;
+	packet.operation = SEC_ARP_REQUEST;
+
+	buf[0] = packet.type;
+	buf[1] = packet.operation;
 
 	/* Get device-id */
 	for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
 		state = uip_ds6_if.addr_list[i].state;
 		if(uip_ds6_if.addr_list[i].isused && state == ADDR_PREFERRED) {
-			memcpy(&buf[1], &uip_ds6_if.addr_list[i].ipaddr.u8[0], 16);
+			memcpy(&buf[2], &uip_ds6_if.addr_list[i].ipaddr.u8[0], 16);
 		}
 	}
 
-	PRINTF("sec-arp: create hello\n");
+	/* Get device MAC */
+	memcpy(&buf[18], &rimeaddr_node_addr.u8[0], 8);
+
+	/* Send buf over slip */
+	slip_write(buf, HELLO_PACKETSIZE);
+
+	PRINTF("sec-arp: create\n");
 }
 
 /*-----------------------------------------------------------------------------------*/
 /**
  *	Parse the bootstrap packet from server
  *
- *	format: | encryption_nonce(3) | network key(16) | central_entity_id(16) | sensor key(16) | MIC(8)
+ * format: | message_type(1) | operation(1) | link_nonce_cntr(1) | network key(16) | edge-router id(16) | sensor key(16) |
  */
 /*-----------------------------------------------------------------------------------*/
-void __attribute__((__far__))
-parse_hello_reply(uint8_t *data, uint16_t len)
+static short
+parse_hello_reply(uint8_t *buf)
 {
-	uint8_t state, i;
-	uint8_t temp_data_len = len & 0xff;
-	uint16_t msg_cntr = (uint16_t)data[0] << 8 | data[1];
-	uint8_t address[16];
-
-	/* Get own ip */
-	for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
-		state = uip_ds6_if.addr_list[i].state;
-		if(uip_ds6_if.addr_list[i].isused && state == ADDR_PREFERRED) {
-			memcpy(&address[0], &uip_ds6_if.addr_list[i].ipaddr.u8[0], 16);
-		}
+	if(buf[0] != HELLO_ACK) {
+		return 0;
 	}
 
-	/* Set bootstrap key for decryption */
-	CC2420_WRITE_RAM_REV(&devices[0].session_key[0], CC2420RAM_KEY1, KEY_SIZE);
-
-	/* Decrypt message */
-	cc2420_decrypt_ccm(data, address, &msg_cntr, &data[2], &temp_data_len, NONCE_SIZE);
-
-	PRINTF("sec-arp: dec_data "); for(i=0;i<temp_data_len;i++) PRINTF("%02x ", data[i]); PRINTF("\n");
-
-	/* Check if authentication was successful */
-	if(data[temp_data_len-1] == 0x00) {
-		/* Write security data to Flash */
-		xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
-		xmem_pwrite(&data[3], (SEC_KEY_SIZE*3), MAC_SECURITY_DATA);
-
-		/* Reset nonce data in flash */
-		xmem_erase(XMEM_ERASE_UNIT_SIZE, APP_NONCE_DATA);
-		PRINTF("sec-arp: reboot()\n");
-		watchdog_reboot();
-	} else {
-		PRINTF("sec-arp: auth. failed\n");
-		return;
+	if(buf[1] != SEC_ARP_REPLY) {
+		return 0;
 	}
+
+#if DEBUG
+	uint8_t i;
+	PRINTF("sec-arp: buf ");
+	for(i=0; i<(KEY_SIZE*3); i++) PRINTF("%02x ", buf[3+i]);
+	PRINTF("\n");
+#endif
+
+	/* Write security data to Flash */
+	xmem_erase(XMEM_ERASE_UNIT_SIZE, MAC_SECURITY_DATA);
+	xmem_pwrite(&buf[3], (KEY_SIZE*3), MAC_SECURITY_DATA);
+
+	PRINTF("sec-arp: parse OK\n");
+
+	watchdog_reboot();
+
+	return 1;
 }
 
 /*-----------------------------------------------------------------------------------*/

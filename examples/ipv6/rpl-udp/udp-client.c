@@ -96,15 +96,10 @@ tcpip_handler(void)
 	  str = (char *)uip_appdata;
 	  len = uip_datalen() & 0xff;
 
-//#if ENABLE_CCM_APPLICATION & SEC_CLIENT
-//	  result = keymanagement_decrypt_packet(&UIP_IP_BUF->srcipaddr, (uint8_t *)str, &len, 0, 0);
-//#endif
-//
-//	  if(str[3] == 'H') {
-//		  P6OUT ^= 0x01;
-//	  }
-//
-//	  PRINTF("DATA recv '"); for(result=3; result<(len-8); result++) {PRINTF("%c", str[result]);} PRINTF("'\n");
+#if ENABLE_CCM_APPLICATION & SEC_CLIENT
+	  result = keymanagement_decrypt_packet(&UIP_IP_BUF->srcipaddr, (uint8_t *)str, &len, 0, 0);
+#endif
+
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -424,8 +419,8 @@ PROCESS_THREAD(udp_client_process, ev, data)
     	PRINTF("Plain:  "); for(i=0; i<data_len; i++) PRINTF("%02x", buf[i]); PRINTF("\n");
 
 #if ENABLE_CCM_APPLICATION & SEC_CLIENT
-    	send_packet(NULL);
-    	//data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_CLIENT_PORT)); // Server
+    	//send_packet(NULL);
+    	data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_CLIENT_PORT)); // Server
     	//data_ptr = keymanagement_send_encrypted_packet(client_conn, (uint8_t *)buf, &data_len, 0, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
     	//uip_udp_packet_sendto(client_conn, &buf[data_ptr], 26, &ipaddr_edge, UIP_HTONS(5444));
 #else
