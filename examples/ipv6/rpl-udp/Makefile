@@ -1,4 +1,4 @@
-all: udp-client udp-server udp-audioTransmit udp-audioReceive udp-rmoni-server udp-rmoni-client
+all: udp-client udp-server udp-audioTransmit udp-audioReceive udp-rmoni-server udp-rmoni-client udp-rmoni-relay
 APPS=servreg-hack
 CONTIKI=../../..
 

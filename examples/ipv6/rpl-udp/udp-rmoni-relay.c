@@ -28,15 +28,23 @@
  */
 
 #include "contiki.h"
-#include "lib/random.h"
-#include "sys/ctimer.h"
+#include "contiki-lib.h"
+#include "contiki-net.h"
 #include "net/uip.h"
-#include "net/uip-ds6.h"
-#include "net/uip-udp-packet.h"
-#include "dev/button-sensor.h"
-#include "sys/ctimer.h"
-#include "cc2420-aes.h"
-#include "dev/cc2420.h"
+#include "net/rpl/rpl.h"
+
+#include "net/netstack.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#include "dev/uart1.h"
+#include "dev/rmoni_serial_line.h"
+#include "lib/ringbuf.h"
+
+#define DEBUG DEBUG_PRINT
+#include "net/uip-debug.h"
 
 /* ------------------------------------- */
 /* Rmoni ASCII commands				     */
@@ -98,7 +106,7 @@ typedef enum {
 /* Rmoni sensor device					 */
 /* ------------------------------------- */
 struct rmoni_device {
-	char		mac_address[16];
+	uint8_t		mac_address[16];
 	char		version[17];
 	uint8_t		initialised;
 };
@@ -117,73 +125,60 @@ static const char * rmoni_pins[10] = {
 	"01", "02", "04", "08", "10", "20", "00", "00", "00", "00"
 };
 
-//#include "contiki-conf.h"
-#ifdef WITH_COMPOWER
-#include "powertrace.h"
-#endif
-#include <stdio.h>
-#include <string.h>
-
-#define UDP_CLIENT_PORT 8765
-#define UDP_SERVER_PORT 5678
-
-#define UDP_EXAMPLE_ID  190
-
-#define DEBUG DEBUG_PRINT
-#include "net/uip-debug.h"
-
-#ifndef PERIOD
-#define PERIOD 20
-#endif
-
-#define START_INTERVAL		(15 * CLOCK_SECOND)
-#define SEND_INTERVAL		(PERIOD * CLOCK_SECOND)
-#define SEND_TIME		(random_rand() % (SEND_INTERVAL))
-#define MAX_PAYLOAD_LEN		40
+#define ASCII_HEADER_SIZE	6
+#define SEPERATOR_CHAR(c) (c == 0x2C)
 
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 
+#define UDP_CLIENT_PORT	5678
+#define UDP_SERVER_PORT	8765
+
+#define UDP_EXAMPLE_ID  190
+
 static struct uip_udp_conn *client_conn;
-static uip_ipaddr_t server_ipaddr;
 static struct rmoni_device rmoni_module;
 
-/*---------------------------------------------------------------------------*/
+static void rmoni_parse_message(char * msg);
+
 PROCESS(udp_client_process, "UDP client process");
 AUTOSTART_PROCESSES(&udp_client_process);
 /*---------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* IMPORTANT: every command has to end with '\r' to avoid out-of-bound errors */
+/*----------------------------------------------------------------------------*/
+static void
+rmoni_serial_output(const char *buf) {
+	uint8_t i = 0;
+
+	/* Start sending bytes until carriage return */
+	while(buf[i] != '\r') {
+		PRINTF("%c", buf[i]);
+		uart1_writeb(buf[i]);
+		i++;
+	}
+	/* Send carriage return to end command */
+	uart1_writeb(buf[i]);
+}
+/*----------------------------------------------------------------------------*/
 static void
 tcpip_handler(void)
 {
-  char *str;
-  uint8_t len;
-  int i;
+  char *appdata;
+  uint8_t i;
 
   if(uip_newdata()) {
-	  str = (char *)uip_appdata;
-	  len = uip_datalen() & 0xff;
-	  PRINTF("Rec: "); for(i=0; i<len; i++) PRINTF("%c", str[i]); PRINTF("\n");
+	/* Store data */
+    appdata = (char *)uip_appdata;
+    appdata[uip_datalen()] = 0;
+    for(i=0; i<uip_datalen(); i++)PRINTF("%c",appdata[i]); PRINTF("\n");
+
+    /* Store remote IP for reply */
+    uip_ipaddr_copy(&client_conn->ripaddr, &UIP_IP_BUF->srcipaddr);
+
+    /* Post command for Rmoni module */
+    rmoni_serial_output(appdata);
   }
-}
-/*---------------------------------------------------------------------------*/
-static void
-send_packet(void *ptr)
-{
-	uint8_t i;
-	char buf[MAX_PAYLOAD_LEN];
-
-	/* Request temperature */
-	memcpy(buf, rmoni_commands[GET], 6);
-	buf[6] = ',';
-	memcpy(&buf[7], &rmoni_module.mac_address[0], 16);
-	buf[23] = ',';
-	memcpy(&buf[24], rmoni_keys[NTC_TEMP], 2);
-	memcpy(&buf[26], rmoni_pins[PIN2], 2);
-	buf[28] = '\r';
-
-	for(i=0; i<29; i++) PRINTF("%c", buf[i]); PRINTF("\n");
-
-    uip_udp_packet_sendto(client_conn, &buf, 29,
-                            &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -195,8 +190,7 @@ print_local_addresses(void)
   PRINTF("Client IPv6 addresses: ");
   for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
     state = uip_ds6_if.addr_list[i].state;
-    if(uip_ds6_if.addr_list[i].isused &&
-       (state == ADDR_TENTATIVE || state == ADDR_PREFERRED)) {
+    if(state == ADDR_TENTATIVE || state == ADDR_PREFERRED) {
       PRINT6ADDR(&uip_ds6_if.addr_list[i].ipaddr);
       PRINTF("\n");
       /* hack to make address "final" */
@@ -215,53 +209,28 @@ set_global_address(void)
   uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 0);
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
+  //uip_ds6_addr_add(&ipaddr, 0, ADDR_MANUAL);
 
-/* The choice of server address determines its 6LoPAN header compression.
- * (Our address will be compressed Mode 3 since it is derived from our link-local address)
- * Obviously the choice made here must also be selected in udp-server.c.
- *
- * For correct Wireshark decoding using a sniffer, add the /64 prefix to the 6LowPAN protocol preferences,
- * e.g. set Context 0 to aaaa::.  At present Wireshark copies Context/128 and then overwrites it.
- * (Setting Context 0 to aaaa::1111:2222:3333:4444 will report a 16 bit compressed address of aaaa::1111:22ff:fe33:xxxx)
- *
- * Note the IPCMV6 checksum verification depends on the correct uncompressed addresses.
- */
-
-#if 0
-/* Mode 1 - 64 bits inline */
-   uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 1);
-#elif 1
-/* Mode 2 - 16 bits inline */
-  //uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
-  //uip_ip6addr(&server_ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 2);
-  uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0xc30c, 0, 0, 4);
-#else
-/* Mode 3 - derived from server link-local (MAC) address */
-  uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0x0250, 0xc2ff, 0xfea8, 0xcd1a); //redbee-econotag
-#endif
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_client_process, ev, data)
 {
-  static struct etimer periodic;
-  static struct ctimer backoff_timer;
-#if WITH_COMPOWER
-  static int print = 0;
-#endif
+  static struct etimer et;
 
   PROCESS_BEGIN();
 
   PROCESS_PAUSE();
 
-  SENSORS_ACTIVATE(button_sensor);
+  PRINTF("UDP rmoni relay node started\n");
 
   set_global_address();
 
-  PRINTF("UDP client process started\n");
-
   print_local_addresses();
 
-  /* new connection with remote host */
+  /* The data sink runs with a 100% duty cycle in order to ensure high
+     packet reception rates. */
+  NETSTACK_MAC.off(1);
+
   client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL);
   if(client_conn == NULL) {
     PRINTF("No UDP connection available, exiting the process!\n");
@@ -269,42 +238,67 @@ PROCESS_THREAD(udp_client_process, ev, data)
   }
   udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
 
-  PRINTF("Created a connection with the server ");
+  PRINTF("Created a client connection with remote address ");
   PRINT6ADDR(&client_conn->ripaddr);
-  PRINTF(" local/remote port %u/%u\n", UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
+  PRINTF(" local/remote port %u/%u\n", UIP_HTONS(client_conn->lport),
+         UIP_HTONS(client_conn->rport));
 
-#if WITH_COMPOWER
-  powertrace_sniff(POWERTRACE_ON);
-#endif
+  /* Initialize uart1 for rmoni module communication */
+  uart1_init(9600);
+  uart1_set_input(rmoni_serial_line_input);
+  rmoni_serial_line_init();
 
-  sprintf(&rmoni_module.mac_address[0], "524D4F0000A05F2D");
+  /* Set timer */
+  etimer_set(&et, CLOCK_SECOND*4);
 
-  etimer_set(&periodic, SEND_INTERVAL);
   while(1) {
     PROCESS_YIELD();
     if(ev == tcpip_event) {
       tcpip_handler();
-    }
-    else if (ev == sensors_event && data == &button_sensor) {
-      send_packet(NULL);
-    }
-
-    if(etimer_expired(&periodic)) {
-      etimer_reset(&periodic);
-      ctimer_set(&backoff_timer, SEND_TIME, send_packet, NULL);
-
-#if WITH_COMPOWER
-      if (print == 0) {
-	powertrace_print("#P");
-      }
-      if (++print == 3) {
-	print = 0;
-      }
-#endif
-
+    } else if (ev == serial_line_rmoni_message) {
+		/* Parse message and formulate reply */
+		rmoni_parse_message((char *) data);
+    } else if(etimer_expired(&et)) {
+		/* Request general device information */
+		if(!rmoni_module.initialised) {
+			etimer_reset(&et);
+			PRINTF("Request MAC\n");
+			rmoni_serial_output(rmoni_commands[GENERAL_INFO]);
+		} else {
+			etimer_stop(&et);
+		}
     }
   }
 
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
+#define INFO_MAC_OFFSET		11
+#define INFO_VERSION_OFFSET 36
+/*----------------------------------------------------------------------------*/
+static void
+rmoni_parse_message(char * msg) {
+	uint8_t i = 0;
+
+	/* Determine message size */
+	while(msg[i] != '\0') {
+		PRINTF("%c", msg[i]);
+		i++;
+	}
+	PRINTF("\n");
+
+	/* Parse packet */
+	if(!rmoni_module.initialised) {
+		if(memcmp(&msg[0], rmoni_commands[NETWORK], ASCII_HEADER_SIZE) == 0) {
+			PRINTF("Init rmoni OK\n");
+			memcpy(&rmoni_module.mac_address[0], &msg[INFO_MAC_OFFSET], 16);
+			memcpy(&rmoni_module.version[0], &msg[INFO_VERSION_OFFSET], 17);
+			rmoni_module.initialised = 1;
+		}
+	} else {
+		/* Reply with rmoni message */
+		uip_udp_packet_send(client_conn, msg, (i-1));
+		/* Clear remote ip address */
+		uip_create_unspecified(&client_conn->ripaddr);
+	}
+}
