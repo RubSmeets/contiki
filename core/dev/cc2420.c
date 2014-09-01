@@ -84,7 +84,6 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG_SEC 0
 #if DEBUG_SEC
 #include <stdio.h>
 #define PRINTFSEC(...)
@@ -827,6 +826,13 @@ cc2420_read(void *buf, unsigned short bufsize)
   }
 #else
   getrxdata(buf, len - AUX_LEN);
+
+#if 0
+  uint8_t p;
+  PRINTDEBUG("R: ");
+  PRINTDEBUG("%d ", len);for(p = 0; p < len-AUX_LEN; p++)PRINTDEBUG("%c", (char)pbuf[p]);PRINTDEBUG("\n");
+#endif
+
 #endif
 
 #if CC2420_CONF_CHECKSUM

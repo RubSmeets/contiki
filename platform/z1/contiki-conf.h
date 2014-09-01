@@ -46,6 +46,8 @@
 #define NETSTACK_CONF_RADIO   cc2420_driver
 #define NETSTACK_CONF_FRAMER  framer_802154
 
+#define DEBUG_SEC				 0
+
 /* Global security defines */
 #if SEC_NODE_ENABLED
 #define SEC_CLIENT				 1

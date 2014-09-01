@@ -12,6 +12,7 @@
 #include "dev/hwconf.h"
 #include "isr_compat.h"
 #include "net/netstack.h"
+#include "net/mac/nullmac.h"
 
 #define DEBUG 1
 #if DEBUG
@@ -22,6 +23,8 @@
 #endif
 
 #define SEND_INTERVAL		(CLOCK_SECOND)
+
+uint16_t packet_count; /* defined in nullmac.h */
 
 /*---------------------------------------------------------------------------*/
 PROCESS(measure_process, "measure_process for cc2420");
@@ -43,7 +46,9 @@ PROCESS_THREAD(measure_process, ev, data)
 
 		if(etimer_expired(&periodic)) {
 		      etimer_reset(&periodic);
-		      PRINTF("test");
+
+		      PRINTF("Count: %d", packet_count);
+		      packet_count = 0;
 
 		}
 	}
