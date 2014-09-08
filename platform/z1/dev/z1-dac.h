@@ -12,9 +12,9 @@
 #define Z1_DAC_1 1
 
 #define PIN6 	  (1<<6)
-#define DAC12AMP5 0x00A0
 
 void dac_init(uint8_t type);
 void dac_setValue(uint16_t value, uint8_t type);
+void dac_disable(uint8_t type);
 
 #endif /* Z1_DAC_H_ */

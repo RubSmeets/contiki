@@ -31,10 +31,10 @@ dac_init(uint8_t type) {
 
 	switch(type) {
 		case Z1_DAC_0:
-			DAC12_0CTL = DAC12SREF0 + DAC12RES + DAC12IR + DAC12AMP5 + DAC12ENC; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium, 8bit resolution */
+			DAC12_0CTL = DAC12SREF0 + DAC12IR + DAC12AMP_5 + DAC12ENC; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium, 12bit resolution */
 			break;
 		case Z1_DAC_1:
-			DAC12_1CTL = DAC12SREF1 + DAC12IR + DAC12AMP5; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium */
+			DAC12_1CTL = DAC12SREF1 + DAC12IR + DAC12AMP_5; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium */
 			break;
 	}
 
@@ -51,6 +51,23 @@ dac_setValue(uint16_t value, uint8_t type) {
 			break;
 		case Z1_DAC_1:
 			DAC12_1DAT = value;
+			break;
+	}
+}
+
+/**
+ *
+ */
+void
+dac_disable(uint8_t type) {
+
+	/* Do not disable Reference voltage generator (may be in use by ADC) */
+	switch(type) {
+		case Z1_DAC_0:
+			DAC12_0CTL = 0x00;
+			break;
+		case Z1_DAC_1:
+			DAC12_1CTL = 0x00;
 			break;
 	}
 }

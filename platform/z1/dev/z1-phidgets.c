@@ -85,9 +85,11 @@ sensors_activate(uint8_t type)
     /* if nothing was started before, start up the ADC system */
     /* Set up the ADC. */
     //ADC12CTL0 = REF2_5V + SHT0_6 + SHT1_6 + MSC; /* Setup ADC12, ref., sampling time */
-    ADC12CTL0 = REF2_5V + SHT0_6 + SHT1_6 + MSC; /* Setup ADC12, ref., sampling time (128 cycles + 13 cycles conversion time + tsync) (8105 samples) */
+    //ADC12CTL0 = REF2_5V + SHT0_6 + SHT1_6 + MSC; /* Setup ADC12, ref., sampling time (128 cycles + 13 cycles conversion time + tsync) (8105 samples) */
+    ADC12CTL0 = REF2_5V + SHT0_7 + SHT1_7 + MSC; /* Setup ADC12, ref., sampling time (192 cycles + 13 cycles conversion time + tsync) (7805 samples) */
     //ADC12CTL1 = SHP + CONSEQ_3 + CSTARTADD_0;	/* Use sampling timer, repeat-sequenc-of-channels */
-    ADC12CTL1 = SHP + ADC12DIV_6 + ADC12SSEL_2 + CONSEQ_2 + CSTARTADD_3;	/* Use sampling timer, Divide clock by 7, use system clock 8MHz, repeat-single-sequenc */
+    //ADC12CTL1 = SHP + ADC12DIV_6 + ADC12SSEL_2 + CONSEQ_2 + CSTARTADD_3;	/* Use sampling timer, Divide clock by 7, use system clock 8MHz, repeat-single-sequenc */
+    ADC12CTL1 = SHP + ADC12DIV_4 + ADC12SSEL_2 + CONSEQ_2 + CSTARTADD_3;	/* Use sampling timer, Divide clock by 5, use system clock 8MHz, repeat-single-sequenc */
 
     /* Enable interrupt */
     PHIDGET_ENABLE_IRQ();
