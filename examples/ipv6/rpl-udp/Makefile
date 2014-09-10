@@ -1,4 +1,4 @@
-all: udp-client udp-server udp-audioTransmit udp-audioReceive
+all: udp-client udp-server udp-audioTransmit udp-audioReceive transmit-audio-adpcm receive-audio-adpcm
 APPS=servreg-hack
 CONTIKI=../../..
 
@@ -9,6 +9,8 @@ UIP_CONF_IPV6=1
 CFLAGS+= -DUIP_CONF_IPV6_RPL
 
 SMALL=1
+
+CFLAGS += -DPROJECT_CONF_H=\"transmit-audio-conf.h\"
 
 ifdef WITH_COMPOWER
 APPS+=powertrace
@@ -21,5 +23,7 @@ endif
 ifdef PERIOD
 CFLAGS+=-DPERIOD=$(PERIOD)
 endif
+
+PROJECT_SOURCEFILES += ADPCM_codec.c
 
 include $(CONTIKI)/Makefile.include
