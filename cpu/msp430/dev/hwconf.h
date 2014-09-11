@@ -60,4 +60,10 @@ static CC_INLINE int  name##_IRQ_ENABLED() {return ADC12IE & (1 << bit);} 	  \
 static CC_INLINE int  name##_CHECK_IRQ() {return ADC12IFG & (1 << bit);}	  \
 static CC_INLINE int  name##_CLEAR_IRQ_FLAG() {return ADC12IFG &= ~(1 << bit);}
 
+#define HWCONF_TB_IRQ(name, bit)                                       	  	  \
+static CC_INLINE void name##_ENABLE_IRQ() {TBCCTL##bit |= CCIE;}          	  \
+static CC_INLINE void name##_DISABLE_IRQ() {TBCCTL##bit &= ~CCIE;}    		  \
+static CC_INLINE int  name##_IRQ_ENABLED() {return TBCCTL##bit & CCIE;} 	  \
+static CC_INLINE int  name##_CLEAR_IRQ_FLAG() {return TBCCTL##bit &= ~CCIFG;}
+
 #endif /* HWCONF_H_ */

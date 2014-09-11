@@ -70,6 +70,7 @@ PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
 
 HWCONF_ADC_IRQ(PHIDGET, ADC7);
+HWCONF_TB_IRQ(TIMERB, 1);
 
 /*---------------------------------------------------------------------------*/
 static void
@@ -91,17 +92,17 @@ tcpip_handler(void)
 			mode = 0x01;
 			decodedValue = 0;
 
-			/* Turn on ADC */
-			//PHIDGET_ENABLE_IRQ();
+			/* Enable Compare interrupt */
+			//TIMERB_ENABLE_IRQ();
 
 		} else if(len == 4) {
 			/* Turn off ADC */
-			PHIDGET_DISABLE_IRQ();
+			TIMERB_DISABLE_IRQ();
 
 			leds_off(LEDS_BLUE);
 		} else {
-			if(PHIDGET_IRQ_ENABLED() == 0) {
-				PHIDGET_ENABLE_IRQ();
+			if(TIMERB_IRQ_ENABLED() == 0) {
+				TIMERB_ENABLE_IRQ();
 			}
 
 			memcpy(&audio_buf[write_ptr*MAX_PAYLOAD_LEN], appdata, len);
@@ -131,6 +132,31 @@ print_local_addresses(void)
   }
 }
 /*---------------------------------------------------------------------------*/
+static void
+init_timerB(void)
+{
+	/* Configure PIN OUT (TBCCR2 available as zolertia output)  */
+	//P4DIR |= (1 << 2);
+	//P4SEL |= (1 << 2);
+
+	/* Turn off timer */
+	TBCTL = 0x00;
+
+	/* Set timer B - SMCLK (8 MHz?)	*/
+	TBCTL = TBSSEL_2 | TBCLR;
+
+	/* Set compare register 1 to toggle/reset */
+	TBCCTL1 |= OUTMOD_3;
+
+	/* Set clock period = 1000 (8000000/8000) */
+	TBCCR0 = 0x03E2;	/* Values are adjusted to exact 8 kHz (994) */
+	TBCCR1 = 0x01F1;	/* (497) */
+
+	/* Start Timer_B in UP mode. */
+	TBCTL |= MC_1;
+
+}
+/*---------------------------------------------------------------------------*/
 __attribute__((__far__))
 PROCESS_THREAD(udp_server_process, ev, data)
 {
@@ -145,8 +171,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
   /* Initialise REF voltage (enough time to stabilize */
   dac_init(Z1_DAC_0);
-  SENSORS_ACTIVATE(phidgets);
-  PHIDGET_DISABLE_IRQ();
+  init_timerB();
 
   PRINTF("UDP server started\n");
 
@@ -218,7 +243,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
-ISR(ADC12, adc_service_routine)
+ISR(TIMERB1, timerb1_service_routine)
 {
 	switch(mode) {
 		case 0x01: /* playback bit (7-4) */
@@ -250,5 +275,5 @@ ISR(ADC12, adc_service_routine)
 			break;
 	}
 
-	PHIDGET_CLEAR_IRQ_FLAG(); /* Clear Interrupt flag */
+	TIMERB_CLEAR_IRQ_FLAG(); /* Clear Interrupt flag */
 }

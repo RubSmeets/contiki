@@ -149,6 +149,31 @@ stop_transmit(void)
 
 }
 /*---------------------------------------------------------------------------*/
+static void
+init_timerB(void)
+{
+	/* Configure PIN OUT (TBCCR2 available as zolertia output)  */
+	//P4DIR |= (1 << 2);
+	//P4SEL |= (1 << 2);
+
+	/* Turn off timer */
+	TBCTL = 0x00;
+
+	/* Set timer B - SMCLK (8 MHz?)	*/
+	TBCTL = TBSSEL_2 | TBCLR;
+
+	/* Set compare register 1 to toggle/reset */
+	TBCCTL1 |= OUTMOD_3;
+
+	/* Set clock period = 1000 (8000000/8000) */
+	TBCCR0 = 0x03E2;	/* Values are adjusted to exact 8 kHz (994) */
+	TBCCR1 = 0x01F1;	/* (497) */
+
+	/* Start Timer_B in UP mode. */
+	TBCTL |= MC_1;
+
+}
+/*---------------------------------------------------------------------------*/
 __attribute__((__far__))
 PROCESS_THREAD(measure_process, ev, data)
 {
@@ -160,6 +185,7 @@ PROCESS_THREAD(measure_process, ev, data)
 	PRINTF("Starting audio transmit process\n");
 
 	SENSORS_ACTIVATE(button_sensor);
+	init_timerB();
 
 	set_global_address();
 	print_local_addresses();
