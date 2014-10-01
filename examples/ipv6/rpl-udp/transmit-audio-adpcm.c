@@ -4,6 +4,7 @@
 
 #include "contiki.h"
 #include "isr_compat.h"
+#include <string.h>
 
 /* Communication includes */
 #include "net/uip.h"
@@ -28,6 +29,12 @@
 
 #define SEND_INTERVAL		(CLOCK_SECOND)
 #define MAX_PAYLOAD_LEN		40
+#define AUDIO_HDR_SIZE		2
+
+typedef struct {
+	uint16_t	seqnr;
+	uint8_t		*adpcm_data;
+} udp_audio_packet_t;
 
 /* UDP connection data */
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
@@ -38,8 +45,11 @@ static uip_ipaddr_t server_ipaddr;
 /* Audio data */
 static uint8_t mode;
 static uint8_t tempSample;
-static uint16_t seqnr;
-static uint8_t audio_sample_buf[MAX_PAYLOAD_LEN*2];
+static udp_audio_packet_t packet;
+static uint16_t audio_sample_buf_aligned[MAX_PAYLOAD_LEN];
+static uint8_t *audio_sample_buf = (uint8_t *)audio_sample_buf_aligned;
+static uint16_t udp_packet_buf_aligned[MAX_PAYLOAD_LEN+AUDIO_HDR_SIZE];
+static uint8_t *udp_packet_buf = (uint8_t *)udp_packet_buf_aligned;
 static uint8_t ptr;
 
 uint16_t counter;
@@ -107,9 +117,10 @@ set_global_address(void)
    uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 1);
 #elif 1
 /* Mode 2 - 16 bits inline */
-  uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
+  //uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
   //uip_ip6addr(&server_ipaddr, 0x20ff, 2, 0, 0, 0xc30c, 0, 0, 2);
   //uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
+   uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 1);
 #else
 /* Mode 3 - derived from server link-local (MAC) address */
   uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0x0250, 0xc2ff, 0xfea8, 0xcd1a); //redbee-econotag
@@ -124,7 +135,7 @@ start_transmit(void)
 
 	/* Prep. ADC variables */
 	mode = 0x00;
-	seqnr = 1;
+	packet.seqnr = 1;
 	ptr = 0;
 
 	/* Send start message */
@@ -177,7 +188,6 @@ init_timerB(void)
 __attribute__((__far__))
 PROCESS_THREAD(measure_process, ev, data)
 {
-	static struct etimer periodic;
 	static uint8_t toggle_record_play = 0;
 
 	PROCESS_BEGIN();
@@ -203,15 +213,10 @@ PROCESS_THREAD(measure_process, ev, data)
 	PRINTF(" local/remote port %u/%u\n",
 	UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
 
-	etimer_set(&periodic, SEND_INTERVAL);
 	while(1) {
 		PROCESS_YIELD();
 
-		if(etimer_expired(&periodic)) {
-		      etimer_reset(&periodic);
-		      //PRINTF("c:%d", counter);
-		      counter = 0;
-		} else if(ev == sensors_event && data == &button_sensor) {
+		if(ev == sensors_event && data == &button_sensor) {
 			if(toggle_record_play == 0x00) {
 				/* Start record */
 				start_transmit();
@@ -238,7 +243,15 @@ PROCESS_THREAD(udp_stream_process_1, ev, data)
 	while(1) {
 		PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
 
-		uip_udp_packet_sendto(client_conn, &audio_sample_buf[0], MAX_PAYLOAD_LEN, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+		packet.adpcm_data = &audio_sample_buf[0];
+
+		/* Create packet */
+		udp_packet_buf[0] = packet.seqnr >> 8;
+		udp_packet_buf[1] = packet.seqnr & 0xFF;
+		memcpy(&udp_packet_buf[2], packet.adpcm_data, MAX_PAYLOAD_LEN);
+
+		uip_udp_packet_sendto(client_conn, &udp_packet_buf[0], (MAX_PAYLOAD_LEN+AUDIO_HDR_SIZE), &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+		packet.seqnr++;
 	}
 
 	PROCESS_END();
@@ -254,7 +267,15 @@ PROCESS_THREAD(udp_stream_process_2, ev, data)
 	while(1) {
 		PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
 
-		uip_udp_packet_sendto(client_conn, &audio_sample_buf[MAX_PAYLOAD_LEN], MAX_PAYLOAD_LEN, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+		packet.adpcm_data = &audio_sample_buf[MAX_PAYLOAD_LEN];
+
+		/* Create packet */
+		udp_packet_buf[0] = packet.seqnr >> 8;
+		udp_packet_buf[1] = packet.seqnr & 0xFF;
+		memcpy(&udp_packet_buf[2], packet.adpcm_data, MAX_PAYLOAD_LEN);
+
+		uip_udp_packet_sendto(client_conn, &udp_packet_buf[0], (MAX_PAYLOAD_LEN+AUDIO_HDR_SIZE), &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+		packet.seqnr++;
 	}
 
 	PROCESS_END();

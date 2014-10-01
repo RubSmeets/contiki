@@ -251,7 +251,7 @@ ISR(TIMERB1, timerb1_service_routine)
 
 			decodedValue = ADPCM_Decoder((audio_buf[read_ptr]>>4) & 0x0F);
 							 /* ADPCM_Decoder() execution time varies depending on the
-								ADPCM code. This is the reaosn why the value is stored in
+								ADPCM code. This is the reason why the value is stored in
 								a variable and during the next ISR call the DAC register
 								is loaded. */
 			mode=0x02;
@@ -261,7 +261,7 @@ ISR(TIMERB1, timerb1_service_routine)
 
 			decodedValue = ADPCM_Decoder(audio_buf[read_ptr] & 0x0F);
 							 /* ADPCM_Decoder() execution time varies depending on the
-								ADPCM code. This is the reaosn why the value is stored in
+								ADPCM code. This is the reason why the value is stored in
 								a variable and during the next ISR call the DAC register
 								is loaded. */
 
