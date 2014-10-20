@@ -95,10 +95,16 @@ ADPCM_Encoder(int Input)
 		Se += dq;
 	}
 
-	if(Se > 4095) {   /* check for underflow/overflow  (12-bit) */
-		Se = 4095;
-	} else if(Se < 0) {
-		Se = 0;
+//	if(Se > 4095) {   /* check for underflow/overflow  (12-bit) */
+//		Se = 4095;
+//	} else if(Se < 0) {
+//		Se = 0;
+//	}
+
+	if(Se > 32767) {   /* check for underflow/overflow  (16-bit) */
+		Se = 32767;
+	} else if(Se < -32768) {
+		Se = -32768;
 	}
 
 	StepSizePTR += StepSizeAdaption[code & 0x07]; /* find new quantizer stepsize */
@@ -150,10 +156,16 @@ ADPCM_Decoder(char code)
 		Se += dq;
 	}
 
-	if(Se > 4095) {   /* check for underflow/overflow */
-		Se = 4095;
-	} else if(Se < 0) {
-		Se = 0;
+//	if(Se > 4095) {   /* check for underflow/overflow */
+//		Se = 4095;
+//	} else if(Se < 0) {
+//		Se = 0;
+//	}
+
+	if(Se > 32767) {   /* check for underflow/overflow  (16-bit) */
+		Se = 32767;
+	} else if(Se < -32768) {
+		Se = -32768;
 	}
 
 	StepSizePTR += StepSizeAdaption[code & 0x07]; /* find new quantizer stepsize */

@@ -53,11 +53,13 @@ static CC_INLINE void name##_IRQ_EDGE_SELECTU() {P##port##IES &= ~(1 << bit);}\
 static CC_INLINE int  name##_CHECK_IRQ() {return P##port##IFG & (1 << bit);} \
 static CC_INLINE int  name##_IRQ_PORT() {return port;}
 
-#define HWCONF_ADC_IRQ(name, bit)                                       	  \
-static CC_INLINE void name##_ENABLE_IRQ() {ADC12IE |= 1 << bit;}          	  \
-static CC_INLINE void name##_DISABLE_IRQ() {ADC12IE &= ~(1 << bit);}      	  \
-static CC_INLINE int  name##_IRQ_ENABLED() {return ADC12IE & (1 << bit);} 	  \
-static CC_INLINE int  name##_CHECK_IRQ() {return ADC12IFG & (1 << bit);}	  \
+#define HWCONF_ADC_IRQ(name, bit)                                       	  	\
+static CC_INLINE void name##_ENABLE_IRQ() {ADC12IE |= 1 << bit;}          	  	\
+static CC_INLINE void name##_DISABLE_IRQ() {ADC12IE &= ~(1 << bit);}      	  	\
+static CC_INLINE int  name##_IRQ_ENABLED() {return ADC12IE & (1 << bit);} 	  	\
+static CC_INLINE void name##_STOP_CONVERSION() {ADC12CTL0 &= ~(1 << ENC);}      \
+static CC_INLINE int  name##_START_CONVERSION() {return ADC12CTL0 & (1 << ENC);}\
+static CC_INLINE int  name##_CHECK_IRQ() {return ADC12IFG & (1 << bit);}	  	\
 static CC_INLINE int  name##_CLEAR_IRQ_FLAG() {return ADC12IFG &= ~(1 << bit);}
 
 #define HWCONF_TB_IRQ(name, bit)                                       	  	  \

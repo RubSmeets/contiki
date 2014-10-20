@@ -47,7 +47,7 @@ void
 dac_setValue(uint16_t value, uint8_t type) {
 	switch(type) {
 		case Z1_DAC_0:
-			DAC12_0DAT = value;
+			DAC12_0DAT = (value>>2);
 			break;
 		case Z1_DAC_1:
 			DAC12_1DAT = value;

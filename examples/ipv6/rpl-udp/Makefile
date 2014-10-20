@@ -1,4 +1,4 @@
-all: udp-client udp-server udp-audioTransmit udp-audioReceive transmit-audio-adpcm receive-audio-adpcm
+all: udp-client udp-server udp-audioTransmit udp-audioReceive transmit-audio-adpcm receive-audio-adpcm intercom_adpcm intercom_g711
 APPS=servreg-hack
 CONTIKI=../../..
 
@@ -24,6 +24,6 @@ ifdef PERIOD
 CFLAGS+=-DPERIOD=$(PERIOD)
 endif
 
-PROJECT_SOURCEFILES += ADPCM_codec.c
+PROJECT_SOURCEFILES += ADPCM_codec.c G_711-codec.c
 
 include $(CONTIKI)/Makefile.include
