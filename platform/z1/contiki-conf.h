@@ -81,6 +81,8 @@
 
 #define QUEUEBUF_CONF_NUM                4//4
 
+#define WITH_FAST_SLEEP					 0
+
 
 #else /* WITH_UIP6 */
 

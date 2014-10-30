@@ -31,7 +31,19 @@ dac_init(uint8_t type) {
 
 	switch(type) {
 		case Z1_DAC_0:
-			DAC12_0CTL = DAC12SREF0 + DAC12IR + DAC12AMP_5 + DAC12ENC; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium, 12bit resolution */
+			/* Configure Amplification settings before calibration */
+			DAC12_0CTL = DAC12AMP_5;
+
+			/* Start calibration DAC */
+			DAC12_0CTL |= DAC12CALON;
+			PRINTF("Calibrate DAC\n");
+			while((DAC12_0CTL & DAC12CALON) != 0) {
+				_NOP();
+			}
+			PRINTF("Calibrate DAC done\n");
+
+			DAC12_0CTL |= DAC12SREF0 + DAC12IR + DAC12DF + DAC12ENC; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium, 12bit resolution, 2s complement */
+			PRINTF("Reg: %04x\n", DAC12_0CTL);
 			break;
 		case Z1_DAC_1:
 			DAC12_1CTL = DAC12SREF1 + DAC12IR + DAC12AMP_5; /* Internal reference (2.5V), DAC output is 1x reference, Medium/Medium */
@@ -45,9 +57,13 @@ dac_init(uint8_t type) {
  */
 void
 dac_setValue(uint16_t value, uint8_t type) {
+	uint16_t temp = 0;
+	temp = (value & 0x07FF) + ((value>>4) & 0x8000);
+
 	switch(type) {
 		case Z1_DAC_0:
-			DAC12_0DAT = (value>>2);
+			//DAC12_0DAT = (value>>4);
+			DAC12_0DAT = temp;
 			break;
 		case Z1_DAC_1:
 			DAC12_1DAT = value;
