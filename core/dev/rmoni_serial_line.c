@@ -115,7 +115,7 @@ PROCESS_THREAD(rmoni_serial_line_process, ev, data)
         }
       } else {
         /* Terminate */
-        buf[ptr++] = (uint8_t)'\0';
+        buf[ptr++] = 0x0d;
 
         /* Broadcast event */
         process_post(PROCESS_BROADCAST, serial_line_rmoni_message, buf);

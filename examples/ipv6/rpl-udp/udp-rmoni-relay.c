@@ -193,7 +193,7 @@ tcpip_handler(void)
 	/* Store data */
     appdata = (char *)uip_appdata;
     appdata[uip_datalen()] = 0;
-    PRINTF("Received: ");for(i=0; i<uip_datalen(); i++)PRINTF("%c",appdata[i]); PRINTF("\n");
+    PRINTF("Received: ");for(i=0; i<uip_datalen(); i++)PRINTF("%02x",appdata[i]); PRINTF("\n");
 
     /* Store remote IP for reply */
     uip_ipaddr_copy(&client_conn->ripaddr, &UIP_IP_BUF->srcipaddr);
@@ -201,7 +201,8 @@ tcpip_handler(void)
     if(!rmoni_module.registered) {
     	PRINTF("Device is registering\n");
     } else {
-		/* Post command for Rmoni module (CHECK FOR VALID COMMAND!!!!!) */
+		/* Post command for Rmoni module (CHECK FOR VALID COMMAND!!!!!)
+		   If the command is invalid the communication will fail		*/
 		rmoni_serial_output(appdata);
     }
   }
@@ -232,14 +233,15 @@ set_global_address(void)
 {
   uip_ipaddr_t ipaddr;
 
-  //uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 0);	/* Default configuration */
-  uip_ip6addr(&ipaddr, 0x20ff, 2, 0, 0, 0, 0, 0, 0);	/* Tunnel configuration */
+  uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 0);	/* Default configuration */
+  //uip_ip6addr(&ipaddr, 0x20ff, 2, 0, 0, 0, 0, 0, 0);	/* Tunnel configuration */
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
   //uip_ds6_addr_add(&ipaddr, 0, ADDR_MANUAL);
 
   /* Set server address (HACK to make server address final) */
-  uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
+  //uip_ip6addr(&server_ipaddr, 0x20ff, 1, 0, 0, 0, 0, 0, 1);
+  uip_ip6addr(&server_ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 1);
 
 }
 /*---------------------------------------------------------------------------*/
@@ -319,8 +321,8 @@ rmoni_parse_message(char * msg) {
 	PRINTF("Parsing message\n");
 
 	/* Determine message size */
-	while(msg[i] != '\0') {
-		PRINTF("%c", msg[i]);
+	while(msg[i] != 0x0d) {
+		PRINTF("%02x", msg[i]);
 		i++;
 	}
 	PRINTF("\n");
@@ -336,7 +338,7 @@ rmoni_parse_message(char * msg) {
 		}
 	} else {
 		/* Reply with rmoni message */
-		uip_udp_packet_send(client_conn, msg, (i-1));
+		uip_udp_packet_send(client_conn, msg, i+1);
 		/* Clear remote ip address */
 		uip_create_unspecified(&client_conn->ripaddr);
 	}

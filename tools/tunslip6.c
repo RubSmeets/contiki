@@ -56,7 +56,7 @@
 
 #include <err.h>
 
-#define ENABLE_SECURITY 1
+#define ENABLE_SECURITY 0
 
 int verbose = 1;
 const char *ipaddr;
