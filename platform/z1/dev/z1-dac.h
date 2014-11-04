@@ -12,6 +12,7 @@
 #define Z1_DAC_1 1
 
 #define PIN6 	  (1<<6)
+#define PIN4	  (1<<4)
 
 void dac_init(uint8_t type);
 void dac_setValue(uint16_t value, uint8_t type);

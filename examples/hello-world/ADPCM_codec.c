@@ -1,3 +1,10 @@
+#define DEBUG 1
+#if DEBUG
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#else
+#define PRINTF(...)
+#endif
 
 static signed int PrevSample;   /* Predicted sample */
 static int PrevStepSize; 		/* Index into step size table */
@@ -30,8 +37,8 @@ const int StepSize[89] = {
 */
 void
 ADPCM_init(void)
-{  PrevSample=0;
-   PrevStepSize=0;
+{  PrevSample=159;	//test value (should be 0)
+   PrevStepSize=19;
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -48,6 +55,8 @@ ADPCM_Encoder(int Input)
 	signed int d;    /* Signal difference between input sample and Se */
 	signed int dq;   /* Quantized difference signal */
 	int StepSizePTR; /* Step size table pointer */
+
+	PRINTF("%d step:%d\n", PrevSample, PrevStepSize);
 
 	Se = PrevSample; /* Restore previous values of signal estimate */
 	StepSizePTR = PrevStepSize;   /* and step size pointer */
@@ -95,10 +104,16 @@ ADPCM_Encoder(int Input)
 		Se += dq;
 	}
 
-	if(Se > 4095) {   /* check for underflow/overflow  (12-bit) */
-		Se = 4095;
-	} else if(Se < 0) {
-		Se = 0;
+//	if(Se > 4095) {   /* check for underflow/overflow  (12-bit) */
+//		Se = 4095;
+//	} else if(Se < 0) {
+//		Se = 0;
+//	}
+
+	if(Se > 32767) {   /* check for underflow/overflow  (16-bit) */
+		Se = 32767;
+	} else if(Se < -32768) {
+		Se = -32768;
 	}
 
 	StepSizePTR += StepSizeAdaption[code & 0x07]; /* find new quantizer stepsize */
@@ -150,10 +165,16 @@ ADPCM_Decoder(char code)
 		Se += dq;
 	}
 
-	if(Se > 4095) {   /* check for underflow/overflow */
-		Se = 4095;
-	} else if(Se < 0) {
-		Se = 0;
+//	if(Se > 4095) {   /* check for underflow/overflow */
+//		Se = 4095;
+//	} else if(Se < 0) {
+//		Se = 0;
+//	}
+
+	if(Se > 32767) {   /* check for underflow/overflow  (16-bit) */
+		Se = 32767;
+	} else if(Se < -32768) {
+		Se = -32768;
 	}
 
 	StepSizePTR += StepSizeAdaption[code & 0x07]; /* find new quantizer stepsize */

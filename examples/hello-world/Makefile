@@ -1,4 +1,4 @@
-CONTIKI_PROJECT = hello-world hello-world2 measure-cc2420 measure-cc2420-r measure-audio measure-audio-adpcm
+CONTIKI_PROJECT = hello-world hello-world2 measure-cc2420 measure-cc2420-r measure-audio measure-audio-adpcm adpcm_test
 all: $(CONTIKI_PROJECT)
 
 UIP_CONF_IPV6=1

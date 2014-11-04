@@ -36,7 +36,7 @@
 
 #define AUDIO_STREAM_TIMEOUT	(CLOCK_SECOND*2)	/* amount of seconds */
 #define MAX_PAYLOAD_LEN			70
-#define MAX_REC_PAYLOAD_LEN		40
+#define MAX_REC_PAYLOAD_LEN		80
 #define AUDIO_HDR_SIZE			2
 #define RFC3551_PCMU			0x30	/* ASCII "0" */
 #define RFC3551_PCMA			0x38	/* ASCII "8" */
@@ -87,6 +87,7 @@ AUTOSTART_PROCESSES(&measure_process, &udp_stream_process_1, &udp_stream_process
 /*---------------------------------------------------------------------------*/
 HWCONF_TB_IRQ(TIMERB, 1);
 HWCONF_ADC_IRQ(PHIDGET, ADC7);
+HWCONF_PIN(AUDIO_AMP_ENABLE, 6, 4); /* Enable pin of audio amp is located on p6.4 */
 /*---------------------------------------------------------------------------*/
 
 static void
@@ -98,7 +99,7 @@ tcpip_handler(void)
 	if(uip_newdata()) {
 		appdata = (char *)uip_appdata;
 		len = uip_datalen();
-		PRINTFDEBUG("Len: %d", len);
+		//PRINTFDEBUG("Len: %d", len);
 
 		if(len == MAX_REC_PAYLOAD_LEN) {
 			etimer_restart(&periodic);
@@ -106,10 +107,14 @@ tcpip_handler(void)
 				PRINTFDEBUG("DAC on\n");
 				leds_on(LEDS_BLUE);
 
+				/* Enable audio amp */
+				AUDIO_AMP_ENABLE_SET();
+
 				/* Prep. DAC variables */
 				write_ptr = 0;
 				read_ptr = 0;
 				decodedValue = 0;
+				audio_codec = RFC3551_PCMU;
 
 				TIMERB_ENABLE_IRQ();
 			}
@@ -226,6 +231,9 @@ stop_transmit(void)
 	PHIDGET_DISABLE_IRQ();
 	PHIDGET_STOP_CONVERSION();
 
+	/* Disable audio amp to save power */
+	AUDIO_AMP_ENABLE_CLEAR();
+
 	leds_off(LEDS_RED);
 }
 /*---------------------------------------------------------------------------*/
@@ -260,10 +268,12 @@ PROCESS_THREAD(measure_process, ev, data)
 
 	SENSORS_ACTIVATE(button_sensor);
 	/* Init the DAC here and enable external voltage ref. of ADC12
-	   allowing enough time for the voltage to stabilize */
+	   allowing enough time for the voltage to stabilize
+	   Configure pin 6.4 to enable/disable audio amp.		*/
 	dac_init(Z1_DAC_0);
 	init_timerB();
 	SENSORS_ACTIVATE(phidgets);
+	AUDIO_AMP_ENABLE_MAKE_OUTPUT();
 
 	/* Turn of ADC conversion and interrupt */
 	PHIDGET_STOP_CONVERSION();
@@ -299,6 +309,9 @@ PROCESS_THREAD(measure_process, ev, data)
 			tcpip_handler();
 		} else if(etimer_expired(&periodic)) {
 			PRINTFDEBUG("time-out\n");
+
+			/* Disable audio amp to save power */
+			AUDIO_AMP_ENABLE_CLEAR();
 
 			/* Turn off DAC */
 			TIMERB_DISABLE_IRQ();
@@ -403,10 +416,10 @@ ISR(TIMERB1, timerb1_service_routine)
 	dac_setValue(decodedValue, Z1_DAC_0);
 
 	switch(audio_codec) {
-		case RFC3551_PCMA: /* playback bit (7-4) */
+		case RFC3551_PCMA: /* playback PCMA Little Endian */
 			decodedValue = alaw2linear(audio_playback[read_ptr]);
 			break;
-		case RFC3551_PCMU: /* playback bit (3-0) */
+		case RFC3551_PCMU: /* playback PCMU Little Endian */
 			decodedValue = ulaw2linear(audio_playback[read_ptr]);
 			break;
 		default:

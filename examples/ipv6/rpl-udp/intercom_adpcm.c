@@ -82,6 +82,7 @@ PROCESS(udp_stream_process_2, "UDP stream process 2");
 /*---------------------------------------------------------------------------*/
 AUTOSTART_PROCESSES(&measure_process, &udp_stream_process_1, &udp_stream_process_2);
 /*---------------------------------------------------------------------------*/
+HWCONF_PIN(AUDIO_AMP_ENABLE, 6, 4); /* Enable pin of audio amp is located on p6.4 */
 HWCONF_TB_IRQ(TIMERB, 1);
 HWCONF_ADC_IRQ(PHIDGET, ADC7);
 /*---------------------------------------------------------------------------*/
@@ -100,13 +101,12 @@ tcpip_handler(void)
 		if(len == MAX_REC_PAYLOAD_LEN) {
 			etimer_restart(&periodic);
 
-			memcpy(&audio_playback[write_ptr*MAX_REC_PAYLOAD_LEN], appdata, len);
-			if(write_ptr == 2) 	write_ptr = 0;
-			else				write_ptr++;
-
 			if(TIMERB_IRQ_ENABLED() == 0) {
 				PRINTFDEBUG("DAC on\n");
 				leds_on(LEDS_BLUE);
+
+				/* Enable audio amp */
+				AUDIO_AMP_ENABLE_SET();
 
 				/* Prep. DAC variables */
 				write_ptr = 0;
@@ -116,6 +116,11 @@ tcpip_handler(void)
 
 				TIMERB_ENABLE_IRQ();
 			}
+
+			memcpy(&audio_playback[write_ptr*MAX_REC_PAYLOAD_LEN], appdata, len);
+
+			if(write_ptr == 2) 	write_ptr = 0;
+			else				write_ptr++;
 
 		} else if(strncmp(appdata, "ready", 5) == 0) {
 			/* Start audio transmission */
@@ -225,6 +230,9 @@ stop_transmit(void)
 	PHIDGET_DISABLE_IRQ();
 	PHIDGET_STOP_CONVERSION();
 
+	/* Disable audio amp to save power */
+	AUDIO_AMP_ENABLE_CLEAR();
+
 	leds_off(LEDS_RED);
 }
 /*---------------------------------------------------------------------------*/
@@ -259,10 +267,13 @@ PROCESS_THREAD(measure_process, ev, data)
 
 	SENSORS_ACTIVATE(button_sensor);
 	/* Init the DAC here and enable external voltage ref. of ADC12
-	   allowing enough time for the voltage to stabilize */
+	   allowing enough time for the voltage to stabilize
+	   Configure pin 6.4 to enable/disable audio amp.		*/
 	dac_init(Z1_DAC_0);
 	init_timerB();
 	SENSORS_ACTIVATE(phidgets);
+	AUDIO_AMP_ENABLE_MAKE_OUTPUT();
+
 
 	/* Turn of ADC conversion and interrupt */
 	PHIDGET_STOP_CONVERSION();
@@ -298,6 +309,9 @@ PROCESS_THREAD(measure_process, ev, data)
 			tcpip_handler();
 		} else if(etimer_expired(&periodic)) {
 			PRINTFDEBUG("time-out\n");
+
+			/* Disable audio amp to save power */
+			AUDIO_AMP_ENABLE_CLEAR();
 
 			/* Turn off DAC */
 			TIMERB_DISABLE_IRQ();
