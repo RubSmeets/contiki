@@ -1,10 +1,10 @@
-all: udp-client udp-server udp-audioTransmit udp-audioReceive
+all: udp-client udp-server udp-audioTransmit udp-audioReceive udp-client-final-demo udp-server-final-demo
 APPS=servreg-hack
 CONTIKI=../../..
 
 UIP_CONF_IPV6=1
 
-#CFLAGS += -DSEC_NODE_ENABLED=1
+CFLAGS += -DSEC_NODE_ENABLED=1
 
 CFLAGS+= -DUIP_CONF_IPV6_RPL
 

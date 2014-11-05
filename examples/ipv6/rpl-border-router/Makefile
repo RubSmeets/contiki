@@ -26,7 +26,7 @@ PROJECT_SOURCEFILES += slip-bridge.c
 #of the slip connection. Large MSS together with low baud rates without flow
 #control will overrun the transmit buffer when the style sheet is requested.
 
-WITH_WEBSERVER=1
+WITH_WEBSERVER=0
 ifeq ($(WITH_WEBSERVER),1)
 CFLAGS += -DWEBSERVER=1
 PROJECT_SOURCEFILES += httpd-simple.c
@@ -45,7 +45,7 @@ $(CONTIKI)/tools/tunslip6:	$(CONTIKI)/tools/tunslip6.c
 	(cd $(CONTIKI)/tools && $(MAKE) tunslip6)
 
 connect-router:	$(CONTIKI)/tools/tunslip6
-	sudo $(CONTIKI)/tools/tunslip6 $(PREFIX) -v5
+	sudo $(CONTIKI)/tools/tunslip6 $(PREFIX) -v4
 
 connect-router-cooja:	$(CONTIKI)/tools/tunslip6
 	sudo $(CONTIKI)/tools/tunslip6 -a 127.0.0.1 $(PREFIX)

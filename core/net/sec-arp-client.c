@@ -17,7 +17,7 @@
 
 #if ENABLE_CBC_LINK_SECURITY & SEC_CLIENT
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -104,7 +104,7 @@ parse_hello_reply(uint8_t *data, uint16_t len)
 {
 	uint8_t state, i;
 	uint8_t temp_data_len = len & 0xff;
-	uint16_t msg_cntr = (uint16_t)data[0] << 8 | data[1];
+	uint16_t msg_cntr = (uint16_t)data[1] << 8 | data[2];
 	uint8_t address[16];
 
 	/* Get own ip */
@@ -118,8 +118,14 @@ parse_hello_reply(uint8_t *data, uint16_t len)
 	/* Set bootstrap key for decryption */
 	CC2420_WRITE_RAM_REV(&devices[0].session_key[0], CC2420RAM_KEY1, KEY_SIZE);
 
+	PRINTF("sec-arp: setup decryption - msg_cnt: %04x nonce_cnt: %02x ", msg_cntr, data[2]);
+	PRINTF("address: "); for(i=0; i<16; i++) PRINTF("%02x",address[i]); PRINTF(" with key: ");
+	for(i=0; i<16; i++) PRINTF("%02x", devices[0].session_key[i]); PRINTF("\n");
+
+	PRINTF("sec-arp: encrypted data - data: "); for(i=0; i<temp_data_len; i++) PRINTF("%02x",data[i]); PRINTF("\n");
+
 	/* Decrypt message */
-	cc2420_decrypt_ccm(data, address, &msg_cntr, &data[2], &temp_data_len, NONCE_SIZE);
+	cc2420_decrypt_ccm(data, address, &msg_cntr, &data[0], &temp_data_len, NONCE_SIZE);
 
 	PRINTF("sec-arp: dec_data "); for(i=0;i<temp_data_len;i++) PRINTF("%02x ", data[i]); PRINTF("\n");
 

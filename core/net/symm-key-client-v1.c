@@ -22,7 +22,7 @@ static const char * printstate[10] = {
 	"S_REQ", "S_REPLY", "S_COMM_REQ", "S_COMM_REPLY", "S_VERIFY_REQ", "S_VERIFY_REPLY", "S_SUCCES", "S_FAILED", "S_IDLE"
 };
 #define PRINTF(...) printf(__VA_ARGS__)
-#define PRINTFBOOT(...)
+#define PRINTFBOOT(...) printf(__VA_ARGS__)
 #define PRINTFDEBUG(...) printf(__VA_ARGS__)
 #else
 #define PRINTFDEBUG(...)
@@ -195,8 +195,12 @@ keymanagement_init(void)
 {
 	//uint8_t bootstrapKey[16] = {0x42,0x96,0x75,0x58,0xa0,0x41,0x18,0x76,0x3b,0x01,0x56,0xbe,0xc9,0xb4,0x53,0x36}; //node 7
 	//uint8_t bootstrapKey[16] = {0x30,0xcf,0xad,0xd4,0x1b,0x2a,0xb9,0x72,0x00,0xa7,0x3c,0x30,0x82,0x00,0xf8,0x12}; //node 2
-	uint8_t bootstrapKey[16] = {0x46,0xce,0x52,0x9c,0xe7,0x43,0x9c,0xac,0xc3,0xdf,0xf4,0x17,0x33,0x52,0x1e,0x10}; // node 4
+	//uint8_t bootstrapKey[16] = {0x46,0xce,0x52,0x9c,0xe7,0x43,0x9c,0xac,0xc3,0xdf,0xf4,0x17,0x33,0x52,0x1e,0x10}; // node 4
+	//uint8_t bootstrapKey[16] = {0x81,0x0c,0xb3,0x65,0x11,0x04,0x9b,0xfc,0x0b,0x11,0xa6,0xcb,0x95,0x94,0xc5,0x65}; //node 5
 	//uint8_t bootstrapKey[16] = {0xd8,0xdb,0xa2,0x63,0xe1,0x96,0x86,0x81,0xd2,0x05,0x92,0x40,0xf4,0xe3,0xc8,0xc4}; // node 6
+	//uint8_t bootstrapKey[16] = {0x47,0x0c,0xef,0xe1,0x39,0x5d,0x91,0xe6,0x60,0x7b,0x21,0x37,0x7c,0x71,0xa9,0x90}; //node 9
+	uint8_t bootstrapKey[16] = {0x81,0xa4,0xe1,0x99,0x5d,0xde,0x3d,0xb6,0xf8,0xfd,0x72,0x81,0xe3,0x67,0x08,0x06}; // node 10 or a
+
 
 	uint8_t temp_sec_nonce_list[KEY_NONCE_SIZE + NONCE_CNTR_SIZE];
 	short i = 0;
@@ -244,13 +248,13 @@ keymanagement_init(void)
 		devices[CENTRAL_ENTITY_INDEX].key_freshness = UPDATE_NONCE;
 	}
 
-	/* Set Server security data */
-	devices[SERVER_INDEX].key_freshness = UPDATE_KEY;
+	/* Set Server session security data */
+	devices[SERVER_INDEX].key_freshness = FRESH;//UPDATE_KEY;
 
 	/* Write nonce data back to flash */
 	update_key_exchange_nonce = 1;
 
-	/* Central Server, server and reserved */
+	/* Central Server, server session and reserved */
 	amount_of_known_devices = 3;
 
 	PRINTFBOOT("Starting Key management process\n");
@@ -294,8 +298,9 @@ keymanagement_send_encrypted_packet(struct uip_udp_conn *c, uint8_t *data, uint8
 		PRINTFDEBUG("Reserved device on wrong port\n");
 		return KEY_REQUEST_TX;
 	} else if((dest_index == CENTRAL_ENTITY_INDEX) && (toport != UIP_HTONS(UDP_SERVER_SEC_PORT))) {
-		/* Use session key instead of sensor key */
-		dest_index = SERVER_INDEX;
+		/* Use session key instead of sensor key if not updating*/
+		if(devices[SERVER_INDEX].key_freshness == FRESH) dest_index = SERVER_INDEX;
+		else return KEY_REQUEST_TX;
 	}
 
 	PRINTFDEBUG("Found device: "); for(i=0; i<DEVICE_ID_SIZE; i++) {PRINTFDEBUG("%02x ", toaddr->u8[i]);} PRINTFDEBUG(" at index: %d\n", dest_index);
@@ -1137,13 +1142,15 @@ parse_comm_reply_message(uint8_t *data)
 	uint8_t temp_request_nonce[3];
 
 	/* Assemble request nonce */
-	set16(temp_request_nonce, 0, request_nonce);
-	temp_request_nonce[2] = request_nonce_cntr;
+	set16(temp_request_nonce, 1, request_nonce);
+	temp_request_nonce[0] = request_nonce_cntr;
 
 	/* Check request nonce */
 	if(memcmp(&data[REQUEST_NONCE_OFFSET], &temp_request_nonce[0], (KEY_NONCE_SIZE+NONCE_CNTR_SIZE)) != 0) {
 		/* Doesn't belong with current request - replay message */
-		PRINTF("key: wrong req_nonce\n");
+		PRINTF("key: wrong req_nonce rec: %02x%02x%02x stored: %02x%02x%02x\n",
+				data[REQUEST_NONCE_OFFSET], data[REQUEST_NONCE_OFFSET+1], data[REQUEST_NONCE_OFFSET+2],
+				temp_request_nonce[0], temp_request_nonce[1], temp_request_nonce[2]);
 		return 0;
 	}
 

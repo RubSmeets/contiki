@@ -78,7 +78,7 @@ int cc2420_get_txpower(void);
 #define CC2420RAM_SEC_LEN 16 /**< Length of security data in CC2420 RAM registers */
 #define APP_MIC_LEN 		8
 #define MSG_NONCE_SIZE		2	/* Size in bytes */
-#define NONCE_SIZE			3	/* Size of the nonce+nonce counter */
+#define NONCE_SIZE			3	/* Size of the msg_nonce+nonce counter */
 
 extern uint8_t potentialHello;
 
