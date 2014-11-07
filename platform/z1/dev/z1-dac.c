@@ -59,7 +59,7 @@ void
 dac_setValue(uint16_t value, uint8_t type) {
 	uint16_t temp = 0;
 	/* value: [1]111 0001 0011 0101 -> temp: [1]001 0011 0101  */
-	temp = ((value>>1) & 0x07FF) + ((value>>4) & 0x0800);
+	temp = ((value) & 0x07FF) + ((value>>4) & 0x0800);
 
 	switch(type) {
 		case Z1_DAC_0:

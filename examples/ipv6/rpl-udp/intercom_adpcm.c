@@ -378,17 +378,28 @@ PROCESS_THREAD(udp_stream_process_2, ev, data)
 	PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
+uint8_t first = 0x01;
 ISR(ADC12, adc_service_routine)
 {
 	uint8_t tempSample;
+	int tempValue = phidgets.value(PHIDGET3V_2);
+
+	if(first == 0x01) {
+		if(ptr < MAX_PAYLOAD_LEN) {
+			PRINTF("%04x", tempValue);
+		} else {
+			first = 0x00;
+		}
+	}
+
 
 	switch(transmit_mode) {
 		case 0x00:
-			tempSample = ADPCM_Encoder(phidgets.value(PHIDGET3V_2))<<4; /* ADPCM code (bit 7-4) */
+			tempSample = ADPCM_Encoder(tempValue)<<4; /* ADPCM code (bit 7-4) */
 			transmit_mode=0x01;
 			break;
 		case 0x01:
-			tempSample = tempSample + (ADPCM_Encoder(phidgets.value(PHIDGET3V_2)) & 0x0F); /* ADPCM code (bit 3-0) */
+			tempSample = tempSample + (ADPCM_Encoder(tempValue) & 0x0F); /* ADPCM code (bit 3-0) */
 			audio_sample_buf[ptr] = tempSample;
 			ptr++;
 			transmit_mode=0x00;
