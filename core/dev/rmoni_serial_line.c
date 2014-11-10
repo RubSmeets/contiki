@@ -42,7 +42,11 @@
 #define PRINTF(...)
 #endif
 
+#ifdef RMONI_SERIAL_LINE_CONF_BUFSIZE
+#define BUFSIZE RMONI_SERIAL_LINE_CONF_BUFSIZE
+#else /* SERIAL_LINE_CONF_BUFSIZE */
 #define BUFSIZE 128
+#endif /* SERIAL_LINE_CONF_BUFSIZE */
 
 #if (BUFSIZE & (BUFSIZE - 1)) != 0
 #error SERIAL_LINE_CONF_BUFSIZE must be a power of two (i.e., 1, 2, 4, 8, 16, 32, 64, ...).
@@ -65,9 +69,10 @@ rmoni_serial_line_input(unsigned char c)
 {
   static uint8_t overflow = 0; /* Buffer overflow: ignore until END */
 
-  if(IGNORE_CHAR(c)) {
-    return 0;
-  }
+  	/* Ignore backspace character */
+//  if(IGNORE_CHAR(c)) {
+//    return 0;
+//  }
 
   if(!overflow) {
     /* Add character */
@@ -135,7 +140,7 @@ PROCESS_THREAD(rmoni_serial_line_process, ev, data)
 void
 rmoni_serial_line_init(void)
 {
-  ringbuf_init(&rxbuf, rxbuf_data, sizeof(rxbuf_data));
+  ringbuf_init(&rxbuf, rxbuf_data, BUFSIZE);
   process_start(&rmoni_serial_line_process, NULL);
 }
 /*---------------------------------------------------------------------------*/

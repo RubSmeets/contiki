@@ -179,8 +179,6 @@ sendRegisterPacket(void) {
 	memcpy(&tempBuf[9], &ipaddr.u8[0], IPV6_ADDRESS_SIZE);
 
 	uip_udp_packet_sendto(client_conn, tempBuf, REGISTER_MSG_SIZE, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
-
-	rmoni_module.registered = 1;
 }
 /*----------------------------------------------------------------------------*/
 static void
@@ -199,7 +197,12 @@ tcpip_handler(void)
     uip_ipaddr_copy(&client_conn->ripaddr, &UIP_IP_BUF->srcipaddr);
 
     if(!rmoni_module.registered) {
-    	PRINTF("Device is registering\n");
+    	if((appdata[0] = 0x02) && uip_datalen() == 3) {
+    		PRINTF("Received register: %c%c\n", appdata[1], appdata[2]);
+    		rmoni_module.registered = 1;
+    	} else {
+    		PRINTF("Device is registering\n");
+    	}
     } else {
 		/* Post command for Rmoni module (CHECK FOR VALID COMMAND!!!!!)
 		   If the command is invalid the communication will fail		*/
@@ -320,7 +323,7 @@ rmoni_parse_message(char * msg) {
 
 	PRINTF("Parsing message\n");
 
-	/* Determine message size */
+	/* Determine message size (Every message is terminated with "0x0d") */
 	while(msg[i] != 0x0d) {
 		PRINTF("%02x", msg[i]);
 		i++;
@@ -340,7 +343,7 @@ rmoni_parse_message(char * msg) {
 		/* Reply with rmoni message */
 		uip_udp_packet_send(client_conn, msg, i+1);
 		/* Clear remote ip address */
-		uip_create_unspecified(&client_conn->ripaddr);
+		//uip_create_unspecified(&client_conn->ripaddr);
 	}
 }
 
