@@ -15,7 +15,7 @@
 #define PIN4	  (1<<4)
 
 void dac_init(uint8_t type);
-void dac_setValue(uint16_t value, uint8_t type);
+void dac_setValue(uint16_t value,  uint8_t channel, uint8_t type);
 void dac_disable(uint8_t type);
 
 #endif /* Z1_DAC_H_ */

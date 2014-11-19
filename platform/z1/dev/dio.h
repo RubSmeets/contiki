@@ -21,10 +21,10 @@ static uint8_t DIOPINS[] = {PIN0,PIN1,PIN2,PIN3,PIN4,PIN5,PIN6,PIN7};
  */
 #define dio_Pin(pin) DIOPINS[pin]
 
-struct Dio_msg {
+typedef struct Dio_msg {
   uint8_t type;
   uint8_t value;
-};
+} dio_msg_t;
 
 /**
  * Initialises the IO status of the port -> should be used after setPins and clearPins has been used

@@ -10,7 +10,7 @@ CFLAGS+= -DUIP_CONF_IPV6_RPL
 
 SMALL=1
 
-CFLAGS += -DPROJECT_CONF_H=\"transmit-audio-conf.h\"
+CFLAGS += -DPROJECT_CONF_H=\"intercom_adpcm-conf.h\"
 
 ifdef WITH_COMPOWER
 APPS+=powertrace

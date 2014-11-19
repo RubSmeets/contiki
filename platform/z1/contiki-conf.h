@@ -66,6 +66,9 @@
 #define ENABLE_CCM_APPLICATION	 1
 #endif
 
+/* Define special digital interrupt */
+#define DIO_CONF_SPECIAL		0
+
 /* Specify a minimum packet size for 6lowpan compression to be
    enabled. This is needed for ContikiMAC, which needs packets to be
    larger than a specified size, if no ContikiMAC header should be

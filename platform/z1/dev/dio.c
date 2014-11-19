@@ -37,7 +37,7 @@
 #define DIO_PORT 2
 
 static uint8_t IO_PINS=0; 
-static struct Dio_msg dio_msg;
+static dio_msg_t dio_msg;
 static struct process *selecting_proc;
 //-------------------------------------------------------
 inline void dio_init(struct process *proc)
@@ -45,9 +45,9 @@ inline void dio_init(struct process *proc)
 	dio_msg.type = DIO_MSG_TYPE;
 	P2DIR &= ~IO_PINS;
   	P2SEL &= ~IO_PINS;
-	P2IES |= IO_PINS;
+	P2IES |= IO_PINS;	/* Falling edge detection */
 	P2IFG &= ~IO_PINS;
-	P2IE |= IO_PINS;	
+	//P2IE |= IO_PINS;
 	selecting_proc = proc;
   	if(proc != NULL)
     		P2IE |= IO_PINS;
@@ -69,7 +69,7 @@ ISR(PORT2, __dio_interrupt)
 {
   	static struct timer debouncetimer; 	
 	dio_msg.value = P2IFG&P2IE;
-	P2IES^=P2IFG; //-- make sure the interrupt will handle both transitions (low to high and high to low)
+	//P2IES^=P2IFG; //-- make sure the interrupt will handle both transitions (low to high and high to low)
   	P2IFG &= ~IO_PINS;
   
   	if(timer_expired(&debouncetimer)) 

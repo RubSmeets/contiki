@@ -41,8 +41,17 @@ const struct sensors_sensor button_sensor;
 static struct timer debouncetimer;
 static int status(int type);
 
+#if DIO_CONF_SPECIAL
+HWCONF_PIN(BUTTON, 2, 6);
+HWCONF_IRQ(BUTTON, 2, 6);
+static struct process *selecting_proc;
+static uint8_t valueIO;
+HWCONF_PIN(SOUND_PRES, 2, 5);
+HWCONF_IRQ(SOUND_PRES, 2, 5);
+#else
 HWCONF_PIN(BUTTON, 2, 5);
 HWCONF_IRQ(BUTTON, 2, 5);
+#endif
 
 /*---------------------------------------------------------------------------*/
 ISR(PORT2, irq_p2)
@@ -56,6 +65,18 @@ ISR(PORT2, irq_p2)
       LPM4_EXIT;
     }
   }
+#if DIO_CONF_SPECIAL
+  else if(SOUND_PRES_CHECK_IRQ()) {
+	  if(timer_expired(&debouncetimer)) {
+		  timer_set(&debouncetimer, CLOCK_SECOND / 64);
+		  valueIO = P2IFG&P2IES;
+		  /* Toggle IRQ edge select */
+		  P2IES^=SOUND_PRES_CHECK_IRQ();
+		  if(selecting_proc != NULL) 	process_post(selecting_proc, PROCESS_EVENT_MSG, &valueIO);
+		  LPM4_EXIT;
+	  }
+  }
+#endif
   P2IFG = 0x00;
   ENERGEST_OFF(ENERGEST_TYPE_IRQ);
 }
@@ -102,3 +123,28 @@ status(int type)
 /*---------------------------------------------------------------------------*/
 SENSORS_SENSOR(button_sensor, BUTTON_SENSOR,
 	       value, configure, status);
+/*---------------------------------------------------------------------------*/
+#if DIO_CONF_SPECIAL
+void
+init_dio(struct process *proc) {
+
+	selecting_proc = proc;
+
+	SOUND_PRES_SELECT();
+	SOUND_PRES_MAKE_INPUT();
+}
+/*---------------------------------------------------------------------------*/
+void
+enable_dio_irq(void) {
+	if(selecting_proc != NULL) {
+		SOUND_PRES_IRQ_EDGE_SELECTU();
+		SOUND_PRES_ENABLE_IRQ();
+		P2IFG = 0x00;
+	}
+}
+/*---------------------------------------------------------------------------*/
+void
+disable_dio_irq(void) {
+	SOUND_PRES_DISABLE_IRQ();
+}
+#endif

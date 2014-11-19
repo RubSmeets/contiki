@@ -36,18 +36,32 @@
 #endif
 
 /* Additional configuration for higher throughput */
+#ifdef NETSTACK_CONF_RDC
+#undef NETSTACK_CONF_RDC
 #define NETSTACK_CONF_RDC 				 nullrdc_driver	/* Always keep transceiver on without phase optimization or retransmit after collisions */
-#define NETSTACK_RDC_CHANNEL_CHECK_RATE  64
-#define UIP_CONF_BUFFER_SIZE     		 200			/* Allow the border-router to send fragment bigger packets (up to 160 bytes needed) */
-#define QUEUEBUF_CONF_NUM          5
-
-#ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          4
+#else
+#define NETSTACK_CONF_RDC				 nullrdc_driver
 #endif
 
+#ifdef NETSTACK_RDC_CHANNEL_CHECK_RATE
+#undef NETSTACK_RDC_CHANNEL_CHECK_RATE
+#define NETSTACK_RDC_CHANNEL_CHECK_RATE  64
+#else
+#define NETSTACK_RDC_CHANNEL_CHECK_RATE	 64
+#endif
 
-#ifndef UIP_CONF_BUFFER_SIZE
-#define UIP_CONF_BUFFER_SIZE     140
+#ifdef UIP_CONF_BUFFER_SIZE
+#undef UIP_CONF_BUFFER_SIZE
+#define UIP_CONF_BUFFER_SIZE     		 200			/* Allow the border-router to send fragment bigger packets (up to 160 bytes needed) */
+#else
+#define UIP_CONF_BUFFER_SIZE	 	     200 //140
+#endif
+
+#ifdef QUEUEBUF_CONF_NUM
+#undef QUEUEBUF_CONF_NUM
+#define QUEUEBUF_CONF_NUM          		 5	//4
+#else
+#define QUEUEBUF_CONF_NUM	 	     	 5
 #endif
 
 #ifndef UIP_CONF_RECEIVE_WINDOW

@@ -38,4 +38,10 @@ extern const struct sensors_sensor button_sensor;
 
 #define BUTTON_SENSOR "Button"
 
+#if DIO_CONF_SPECIAL
+void init_dio(struct process *proc);
+void enable_dio_irq(void);
+void disable_dio_irq(void);
+#endif
+
 #endif /* BUTTON_SENSOR_H_ */

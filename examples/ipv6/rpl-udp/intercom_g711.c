@@ -35,16 +35,39 @@
 #define UDP_SERVER_PORT 5678
 
 #define AUDIO_STREAM_TIMEOUT	(CLOCK_SECOND*2)	/* amount of seconds */
-#define MAX_PAYLOAD_LEN			70
+#define TONE_INTERVAL			(CLOCK_SECOND)
+#define BACK_OFF_TIMEOUT		20  /* 20 clock seconds */
+#define REPEAT_SINE				40  /* 40 * (125µs * 200 samples) = 1 second tone */
+#define SINE_SAMPLE_COUNT		400
+#define MAX_PAYLOAD_LEN			60
 #define MAX_REC_PAYLOAD_LEN		80
 #define AUDIO_HDR_SIZE			2
 #define RFC3551_PCMU			0x30	/* ASCII "0" */
 #define RFC3551_PCMA			0x38	/* ASCII "8" */
+#define PRESSURE_IN				7	/* Port 2 pin 7 */
+#define	BUTTON_EXT				6	/* Port 2 pin 6 */
 
-typedef struct {
-	uint16_t	seqnr;
-	uint8_t		*adpcm_data;
-} udp_audio_packet_t;
+/* 440 Hz sine wave 16-bit signed little endian Byte order */
+static const uint8_t sine_440[] = {0x00, 0x00, 0xA9, 0x1E, 0xB1, 0x39, 0xE8, 0x4D, 0xE8, 0x58, 0x65, 0x59, 0x51, 0x4F, 0xDB, 0x3B, 0x52, 0x21, 0xD8, 0x02,
+							0x08, 0xE4, 0x87, 0xC8, 0x94, 0xB3, 0xAB, 0xA7, 0x34, 0xA6, 0x5B, 0xAF, 0x0B, 0xC2, 0x0E, 0xDC, 0x51, 0xFA, 0x40, 0x19,
+							0x33, 0x35, 0xDC, 0x4A, 0xAB, 0x57, 0x1C, 0x5A, 0xE5, 0x51, 0x00, 0x40, 0x8A, 0x26, 0x85, 0x08, 0x7E, 0xE9, 0x20, 0xCD,
+							0xC7, 0xB6, 0x15, 0xA9, 0xAB, 0xA5, 0xEF, 0xAC, 0x05, 0xBE, 0xE9, 0xD6, 0xA8, 0xF4, 0xBF, 0x13, 0x7F, 0x30, 0x84, 0x47,
+							0x15, 0x56, 0x77, 0x5A, 0x27, 0x54, 0xE4, 0x43, 0x9B, 0x2B, 0x29, 0x0E, 0x0A, 0xEF, 0xED, 0xD1, 0x43, 0xBA, 0xD7, 0xAA,
+							0x7D, 0xA5, 0xD7, 0xAA, 0x43, 0xBA, 0xED, 0xD1, 0x0A, 0xEF, 0x29, 0x0E, 0x9B, 0x2B, 0xE4, 0x43, 0x27, 0x54, 0x77, 0x5A,
+							0x15, 0x56, 0x84, 0x47, 0x7F, 0x30, 0xBF, 0x13, 0xA8, 0xF4, 0xE9, 0xD6, 0x05, 0xBE, 0xEF, 0xAC, 0xAB, 0xA5, 0x15, 0xA9,
+							0xC7, 0xB6, 0x20, 0xCD, 0x7E, 0xE9, 0x85, 0x08, 0x8A, 0x26, 0x00, 0x40, 0xE5, 0x51, 0x1C, 0x5A, 0xAB, 0x57, 0xDC, 0x4A,
+							0x33, 0x35, 0x40, 0x19, 0x51, 0xFA, 0x0E, 0xDC, 0x0B, 0xC2, 0x5B, 0xAF, 0x34, 0xA6, 0xAB, 0xA7, 0x94, 0xB3, 0x87, 0xC8,
+							0x08, 0xE4, 0xD8, 0x02, 0x52, 0x21, 0xDB, 0x3B, 0x51, 0x4F, 0x65, 0x59, 0xE8, 0x58, 0xE8, 0x4D, 0xB1, 0x39, 0xA9, 0x1E,
+							0x00, 0x00, 0x57, 0xE1, 0x4F, 0xC6, 0x18, 0xB2, 0x18, 0xA7, 0x9B, 0xA6, 0xAF, 0xB0, 0x25, 0xC4, 0xAE, 0xDE, 0x28, 0xFD,
+							0xF8, 0x1B, 0x79, 0x37, 0x6C, 0x4C, 0x55, 0x58, 0xCC, 0x59, 0xA5, 0x50, 0xF5, 0x3D, 0xF2, 0x23, 0xAF, 0x05, 0xC0, 0xE6,
+							0xCD, 0xCA, 0x24, 0xB5, 0x55, 0xA8, 0xE4, 0xA5, 0x1B, 0xAE, 0x00, 0xC0, 0x76, 0xD9, 0x7B, 0xF7, 0x82, 0x16, 0xE0, 0x32,
+							0x39, 0x49, 0xEB, 0x56, 0x55, 0x5A, 0x11, 0x53, 0xFB, 0x41, 0x17, 0x29, 0x58, 0x0B, 0x41, 0xEC, 0x81, 0xCF, 0x7C, 0xB8,
+							0xEB, 0xA9, 0x89, 0xA5, 0xD9, 0xAB, 0x1C, 0xBC, 0x65, 0xD4, 0xD7, 0xF1, 0xF6, 0x10, 0x13, 0x2E, 0xBD, 0x45, 0x29, 0x55,
+							0x83, 0x5A, 0x29, 0x55, 0xBD, 0x45, 0x13, 0x2E, 0xF6, 0x10, 0xD7, 0xF1, 0x65, 0xD4, 0x1C, 0xBC, 0xD9, 0xAB, 0x89, 0xA5,
+							0xEB, 0xA9, 0x7C, 0xB8, 0x81, 0xCF, 0x41, 0xEC, 0x58, 0x0B, 0x17, 0x29, 0xFB, 0x41, 0x11, 0x53, 0x55, 0x5A, 0xEB, 0x56,
+							0x39, 0x49, 0xE0, 0x32, 0x82, 0x16, 0x7B, 0xF7, 0x76, 0xD9, 0x00, 0xC0, 0x1B, 0xAE, 0xE4, 0xA5, 0x55, 0xA8, 0x24, 0xB5,
+							0xCD, 0xCA, 0xC0, 0xE6, 0xAF, 0x05, 0xF2, 0x23, 0xF5, 0x3D, 0xA5, 0x50, 0xCC, 0x59, 0x55, 0x58, 0x6C, 0x4C, 0x79, 0x37,
+							0xF8, 0x1B, 0x28, 0xFD, 0xAE, 0xDE, 0x25, 0xC4, 0xAF, 0xB0, 0x9B, 0xA6, 0x18, 0xA7, 0x18, 0xB2, 0x4F, 0xC6, 0x57, 0xE1};
 
 /* UDP connection data */
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
@@ -52,13 +75,19 @@ typedef struct {
 static struct uip_udp_conn *client_conn;
 static uip_ipaddr_t server_ipaddr;
 
+/* Wait tone data */
+static struct etimer calltone;
+static uint8_t back_off_count;
+static uint8_t repeat_sine_count;
+static uint8_t play_tone;
+static uint8_t tone_on_off;
+static uint16_t sine_ptr;
+
 /* Audio data transmit */
-static uint8_t enable_capture;
-static udp_audio_packet_t packet;
+static const char PAUZE_STREAM[] = "pauzeS";
+static const char START_STREAM[] = "startS";
 static uint16_t audio_sample_buf_aligned[MAX_PAYLOAD_LEN];
 static uint8_t *audio_sample_buf = (uint8_t *)audio_sample_buf_aligned;
-static uint16_t udp_packet_buf_aligned[MAX_PAYLOAD_LEN+AUDIO_HDR_SIZE];
-static uint8_t *udp_packet_buf = (uint8_t *)udp_packet_buf_aligned;
 static uint8_t ptr;
 
 /* Audio data receive */
@@ -91,10 +120,68 @@ HWCONF_PIN(AUDIO_AMP_ENABLE, 6, 4); /* Enable pin of audio amp is located on p6.
 /*---------------------------------------------------------------------------*/
 
 static void
+turn_on_adc(void) {
+	/* Prep. ADC variables */
+	ptr = 0;
+
+	/* Turn on ADC */
+	PHIDGET_ENABLE_IRQ();
+	PHIDGET_START_CONVERSION();
+}
+/*---------------------------------------------------------------------------*/
+static void
+turn_off_adc(void) {
+	/* Only disable IRQ not the REF voltage */
+	PHIDGET_DISABLE_IRQ();
+	PHIDGET_STOP_CONVERSION();
+}
+/*---------------------------------------------------------------------------*/
+static void
+turn_on_dac(void) {
+	/* Enable audio amp */
+	AUDIO_AMP_ENABLE_SET();
+	TIMERB_ENABLE_IRQ();
+}
+/*---------------------------------------------------------------------------*/
+static void
+turn_off_dac(void) {
+	/* Explicitly turn off DAC */
+	TIMERB_DISABLE_IRQ();
+	AUDIO_AMP_ENABLE_CLEAR();
+}
+/*---------------------------------------------------------------------------*/
+static void
+turn_on_wait_tone(void) {
+	sine_ptr = 0;
+	repeat_sine_count = 0;
+
+	/* Enable audio amp */
+	turn_on_dac();
+	tone_on_off = 0;
+}
+/*---------------------------------------------------------------------------*/
+static void
+turn_off_wait_tone(void) {
+	turn_off_dac();
+	tone_on_off = 1;
+}
+/*---------------------------------------------------------------------------*/
+static void
+turn_on_audio_playback(void) {
+	/* Prep. DAC variables */
+	write_ptr = 0;
+	read_ptr = 0;
+	decodedValue = 0;
+	audio_codec = RFC3551_PCMU;
+
+	turn_on_dac();
+}
+/*---------------------------------------------------------------------------*/
+static void
 tcpip_handler(void)
 {
 	char *appdata;
-	uint8_t i, len;
+	uint8_t len;
 
 	if(uip_newdata()) {
 		appdata = (char *)uip_appdata;
@@ -103,20 +190,17 @@ tcpip_handler(void)
 
 		if(len == MAX_REC_PAYLOAD_LEN) {
 			etimer_restart(&periodic);
+
+			/* Disable wait tone */
+			play_tone = 0x00;
+
 			if(TIMERB_IRQ_ENABLED() == 0) {
 				PRINTFDEBUG("DAC on\n");
 				leds_on(LEDS_BLUE);
 
-				/* Enable audio amp */
-				AUDIO_AMP_ENABLE_SET();
+				/* Prepare audio playback */
+				turn_on_audio_playback();
 
-				/* Prep. DAC variables */
-				write_ptr = 0;
-				read_ptr = 0;
-				decodedValue = 0;
-				audio_codec = RFC3551_PCMU;
-
-				TIMERB_ENABLE_IRQ();
 			}
 
 			memcpy(&audio_playback[write_ptr*MAX_REC_PAYLOAD_LEN], appdata, len);
@@ -128,23 +212,19 @@ tcpip_handler(void)
 			PRINTFDEBUG("Capture on %d\n", appdata[5]);
 			leds_on(LEDS_RED);
 
-			audio_codec = appdata[5];
-			enable_capture = 1;
-			/* TODO: Enable digital input interrupt:
-			 * - input is high when sound pressure rises above predefined level
-			 * - input is low when sound pressure is to low
-			 */
+			/* Disable wait tone */
+			play_tone = 0x00;
 
-			/* Turn on ADC */
-			PHIDGET_ENABLE_IRQ();
-			PHIDGET_START_CONVERSION();
+			/* Extract audio codec settings */
+			audio_codec = appdata[5];
+
+			/* Allow sound to be recorded when sound pressure is high enough */
+			//enable_dio_irq();
+			turn_on_adc();
 
 		} else if(strncmp(appdata, "stop", 4) == 0) {
 			/* Start audio transmission */
 			PRINTFDEBUG("Capture off\n");
-			leds_on(LEDS_RED);
-
-			enable_capture = 0;
 
 			/* Explicitly turn off adc transmission */
 			stop_transmit();
@@ -213,9 +293,11 @@ start_transmit(void)
 {
 	char msg[4];
 
-	/* Prep. ADC variables */
-	packet.seqnr = 1;
-	ptr = 0;
+	/* Play tone to indicate wait */
+	PRINTF("Play tone\n");
+	play_tone = 1;
+	back_off_count = 0;
+	etimer_restart(&calltone);
 
 	PRINTFDEBUG("Starting Call\n");
 
@@ -227,9 +309,9 @@ start_transmit(void)
 static void
 stop_transmit(void)
 {
-	/* Only disable IRQ not the REF voltage */
-	PHIDGET_DISABLE_IRQ();
-	PHIDGET_STOP_CONVERSION();
+	/* Disable ADC */
+	disable_dio_irq();
+	turn_off_adc();
 
 	/* Disable audio amp to save power */
 	AUDIO_AMP_ENABLE_CLEAR();
@@ -270,14 +352,14 @@ PROCESS_THREAD(measure_process, ev, data)
 	/* Init the DAC here and enable external voltage ref. of ADC12
 	   allowing enough time for the voltage to stabilize
 	   Configure pin 6.4 to enable/disable audio amp.		*/
+	init_dio(&measure_process);
 	dac_init(Z1_DAC_0);
 	init_timerB();
 	SENSORS_ACTIVATE(phidgets);
 	AUDIO_AMP_ENABLE_MAKE_OUTPUT();
 
-	/* Turn of ADC conversion and interrupt */
-	PHIDGET_STOP_CONVERSION();
-	PHIDGET_DISABLE_IRQ();
+	/* Turn off ADC conversion and interrupt */
+	turn_off_adc();
 
 	set_global_address();
 	print_local_addresses();
@@ -300,30 +382,54 @@ PROCESS_THREAD(measure_process, ev, data)
 	UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
 
 	etimer_set(&periodic, AUDIO_STREAM_TIMEOUT);
+	etimer_set(&calltone, TONE_INTERVAL);
 	while(1) {
 		PROCESS_YIELD();
 
 		if(ev == sensors_event && data == &button_sensor) {
 			start_transmit();
+		} else if(ev == PROCESS_EVENT_MSG) {	/* sound pressure high enough */
+			if(*(uint8_t *)data < 32) {	/* Rising edge */
+				/* Interrupt stream from remote */
+				uip_udp_packet_sendto(client_conn, PAUZE_STREAM, 6, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+				/* Turn on ADC */
+				turn_on_adc();
+			} else {	/* Falling edge */
+				/* Enable stream from remote */
+				uip_udp_packet_sendto(client_conn, START_STREAM, 6, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+				/* Turn off ADC */
+				turn_off_adc();
+			}
 		} else if(ev == tcpip_event) {
 			tcpip_handler();
-		} else if(etimer_expired(&periodic)) {
+		} else if(etimer_expired(&periodic) && data == &periodic) {
 			PRINTFDEBUG("time-out\n");
 
-			/* Disable audio amp to save power */
-			AUDIO_AMP_ENABLE_CLEAR();
-
-			/* Turn off DAC */
-			TIMERB_DISABLE_IRQ();
+			/* Disable audio playback */
+			turn_off_dac();
 			leds_off(LEDS_BLUE);
+		} else if(etimer_expired(&calltone) && data == &calltone) {
+			if(play_tone) {
+				etimer_restart(&calltone);
+
+				/* Check how long the tone has been playing */
+				if(back_off_count == BACK_OFF_TIMEOUT) {
+					play_tone = 0x00;
+				} else {
+					back_off_count++;
+				}
+
+				/* Generate tone 1 second on - 1 second off */
+				if(tone_on_off == 1) {
+					turn_on_wait_tone();
+				} else {
+					turn_off_wait_tone();
+				}
+			} else {
+				PRINTF("Stop tone\n");
+				turn_off_wait_tone();
+			}
 		}
-//		else if() {	/* read IO for microphone enable */
-//			if(enable_capture) {
-//				/* Turn on ADC */
-//				PHIDGET_ENABLE_IRQ();
-//				PHIDGET_START_CONVERSION();
-//			}
-//		}
 
 	}
 
@@ -340,15 +446,7 @@ PROCESS_THREAD(udp_stream_process_1, ev, data)
 	while(1) {
 		PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
 
-		packet.adpcm_data = &audio_sample_buf[0];
-
-		/* Create packet */
-		udp_packet_buf[0] = packet.seqnr >> 8;
-		udp_packet_buf[1] = packet.seqnr & 0xFF;
-		memcpy(&udp_packet_buf[2], packet.adpcm_data, MAX_PAYLOAD_LEN);
-
-		uip_udp_packet_sendto(client_conn, &udp_packet_buf[0], (MAX_PAYLOAD_LEN+AUDIO_HDR_SIZE), &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
-		packet.seqnr++;
+		uip_udp_packet_sendto(client_conn, &audio_sample_buf[0], MAX_PAYLOAD_LEN, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
 	}
 
 	PROCESS_END();
@@ -364,15 +462,7 @@ PROCESS_THREAD(udp_stream_process_2, ev, data)
 	while(1) {
 		PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
 
-		packet.adpcm_data = &audio_sample_buf[MAX_PAYLOAD_LEN];
-
-		/* Create packet */
-		udp_packet_buf[0] = packet.seqnr >> 8;
-		udp_packet_buf[1] = packet.seqnr & 0xFF;
-		memcpy(&udp_packet_buf[2], packet.adpcm_data, MAX_PAYLOAD_LEN);
-
-		uip_udp_packet_sendto(client_conn, &udp_packet_buf[0], (MAX_PAYLOAD_LEN+AUDIO_HDR_SIZE), &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
-		packet.seqnr++;
+		uip_udp_packet_sendto(client_conn, &audio_sample_buf[MAX_PAYLOAD_LEN], MAX_PAYLOAD_LEN, &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
 	}
 
 	PROCESS_END();
@@ -380,10 +470,11 @@ PROCESS_THREAD(udp_stream_process_2, ev, data)
 /*---------------------------------------------------------------------------*/
 ISR(ADC12, adc_service_routine)
 {
-	uint8_t encodedSample;
-	uint16_t tempSample;
+	uint8_t encodedSample = 0x00;
+	int tempSample;
 
 	tempSample = phidgets.value(PHIDGET3V_2);
+	tempSample = tempSample - 2457;	/* remove offset (1,5V - ref 2,5V equals 60% of max value 4096) */
 
 	switch(audio_codec) {	/* Calculated using little endian */
 		case RFC3551_PCMA:
@@ -413,23 +504,36 @@ ISR(ADC12, adc_service_routine)
 ISR(TIMERB1, timerb1_service_routine)
 {
 
-	dac_setValue(decodedValue, Z1_DAC_0);
+	if(!play_tone) {
+		dac_setValue(decodedValue, Z1_DAC_0, 0);
 
-	switch(audio_codec) {
-		case RFC3551_PCMA: /* playback PCMA Little Endian */
-			decodedValue = alaw2linear(audio_playback[read_ptr]);
-			break;
-		case RFC3551_PCMU: /* playback PCMU Little Endian */
-			decodedValue = ulaw2linear(audio_playback[read_ptr]);
-			break;
-		default:
-			break;
-	}
+		switch(audio_codec) {
+			case RFC3551_PCMA: /* playback PCMA Little Endian */
+				decodedValue = alaw2linear(audio_playback[read_ptr]);
+				break;
+			case RFC3551_PCMU: /* playback PCMU Little Endian */
+				decodedValue = ulaw2linear(audio_playback[read_ptr]);
+				break;
+			default:
+				break;
+		}
 
-	read_ptr++;
+		read_ptr++;
 
-	if (read_ptr >= (MAX_REC_PAYLOAD_LEN*3)) {
-		read_ptr = 0;
+		if (read_ptr >= (MAX_REC_PAYLOAD_LEN*3)) {
+			read_ptr = 0;
+		}
+	} else {
+		if(repeat_sine_count < REPEAT_SINE) {
+			decodedValue = (uint16_t) ((sine_440[sine_ptr+1] << 8) | (sine_440[sine_ptr] & 0xff));
+			dac_setValue(decodedValue, Z1_DAC_0, 1);
+			sine_ptr = sine_ptr + 2;
+
+			if(sine_ptr == (SINE_SAMPLE_COUNT-2)) {
+				repeat_sine_count++;
+				sine_ptr = 0;
+			}
+		}
 	}
 
 	TIMERB_CLEAR_IRQ_FLAG(); /* Clear Interrupt flag */

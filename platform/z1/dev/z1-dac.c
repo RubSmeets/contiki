@@ -56,12 +56,17 @@ dac_init(uint8_t type) {
  *
  */
 void
-dac_setValue(uint16_t value, uint8_t type) {
+dac_setValue(uint16_t value, uint8_t channel, uint8_t type) {
 	uint16_t temp = 0;
 	/* value: [1]111 0001 0011 0101 -> temp: [1]001 0011 0101  */
-	temp = ((value) & 0x07FF) + ((value>>4) & 0x0800);
+	if(type == 0x00) {
+		//temp = ((value >> 3) & 0x07FF) + ((value>>4) & 0x0800);
+		temp = (value >> 4);
+	} else {
+		temp = (value >> 4);
+	}
 
-	switch(type) {
+	switch(channel) {
 		case Z1_DAC_0:
 			//DAC12_0DAT = (value>>4);
 			DAC12_0DAT = temp;
