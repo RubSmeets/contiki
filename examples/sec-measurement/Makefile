@@ -1,0 +1,13 @@
+CONTIKI_PROJECT = aes128_z1_test
+all: $(CONTIKI_PROJECT)
+CONTIKI = ../..
+
+UIP_CONF_IPV6=1
+
+CFLAGS += -DSEC_NODE_ENABLED=1
+
+SMALL=1
+
+PROJECT_SOURCEFILES += measureSpeed.c
+
+include $(CONTIKI)/Makefile.include

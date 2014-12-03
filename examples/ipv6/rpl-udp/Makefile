@@ -1,4 +1,4 @@
-all: udp-client udp-server udp-audioTransmit udp-audioReceive udp-client-final-demo udp-server-final-demo
+all: udp-client udp-server udp-audioTransmit udp-audioReceive udp-client-final-demo udp-server-final-demo udp-client-final-reference
 APPS=servreg-hack
 CONTIKI=../../..
 

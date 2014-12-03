@@ -32,12 +32,10 @@
 #include "net/uip-ds6.h"
 #include "net/uip-udp-packet.h"
 #include "dev/button-sensor.h"
-#include "cc2420-aes.h"
-#include "dev/cc2420.h"
+#include "cc2420.h"
 #include "symm-key-client-v1.h"
 #include "dev/xmem.h"
 #include "net/rime/rimeaddr.h"
-#include "dev/adxl345.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -52,7 +50,6 @@
 #define PERIOD 20
 #endif
 
-#define ACCM_READ_INTERVAL  CLOCK_SECOND
 #define SEND_INTERVAL		(PERIOD * CLOCK_SECOND)
 #define MAX_PAYLOAD_LEN		40
 
@@ -67,70 +64,11 @@ static struct uip_udp_conn *client_conn;
 static uip_ipaddr_t server_ipaddr;
 static uip_ipaddr_t ipaddr_udp_server_node;
 
-uint8_t temp_sec_device_list[66];
-
 static uint8_t push_cntr = 0;
-static process_event_t sendMessage_event;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(udp_client_process, "UDP client process");
-PROCESS(accel_process, "Test Accel process");
-AUTOSTART_PROCESSES(&accel_process, &udp_client_process);
-/*---------------------------------------------------------------------------*/
-/* As several interrupts can be mapped to one interrupt pin, when interrupt
-    strikes, the adxl345 interrupt source register is read. This function prints
-    out which interrupts occurred. Note that this will include all interrupts,
-    even those mapped to 'the other' pin, and those that will always signal even if
-    not enabled (such as watermark). */
-
-void __attribute__((__far__))
-print_int(uint16_t reg){
-#define ANNOYING_ALWAYS_THERE_ANYWAY_OUTPUT 0
-#if ANNOYING_ALWAYS_THERE_ANYWAY_OUTPUT
-  if(reg & ADXL345_INT_OVERRUN) {
-    printf("Overrun ");
-  }
-  if(reg & ADXL345_INT_WATERMARK) {
-    printf("Watermark ");
-  }
-  if(reg & ADXL345_INT_DATAREADY) {
-    printf("DataReady ");
-  }
-#endif
-  if(reg & ADXL345_INT_FREEFALL) {
-	  PRINTF("Freefall ");
-  }
-  if(reg & ADXL345_INT_INACTIVITY) {
-	  PRINTF("InActivity ");
-  }
-  if(reg & ADXL345_INT_ACTIVITY) {
-	  PRINTF("Activity ");
-  }
-  if(reg & ADXL345_INT_DOUBLETAP) {
-	  PRINTF("DoubleTap ");
-  }
-  if(reg & ADXL345_INT_TAP) {
-	  PRINTF("Tap ");
-  }
-  PRINTF("\n");
-}
-/*---------------------------------------------------------------------------*/
-/* accelerometer free fall detection callback */
-void __attribute__((__far__))
-accm_ff_cb(uint8_t reg){
-  uint8_t data = 0x01;
-  process_post(&udp_client_process, sendMessage_event, &data);
-  print_int(reg);
-}
-/*---------------------------------------------------------------------------*/
-/* accelerometer tap and double tap detection callback */
-
-void __attribute__((__far__))
-accm_tap_cb(uint8_t reg){
-  uint8_t data = 0x02;
-  process_post(&udp_client_process, sendMessage_event, &data);
-  print_int(reg);
-}
+AUTOSTART_PROCESSES(&udp_client_process);
 /*---------------------------------------------------------------------------*/
 static void
 tcpip_handler(void)
@@ -253,6 +191,8 @@ PROCESS_THREAD(udp_client_process, ev, data)
       tcpip_handler();
     }
     else if (ev == sensors_event && data == &button_sensor) {
+    	send_packet(0x01);
+
     	/* Increment push counter */
     	push_cntr++;
     	if(push_cntr == 10) {
@@ -261,8 +201,6 @@ PROCESS_THREAD(udp_client_process, ev, data)
     	} else {
     		PRINTF("Push count: %d\n", push_cntr);
     	}
-    } else if (ev == sendMessage_event) {
-    	send_packet(*(uint8_t *)data);
     }
 
     if(etimer_expired(&periodic)) {
@@ -276,44 +214,4 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   PROCESS_END();
 }
-/*---------------------------------------------------------------------------*/
-
-/*---------------------------------------------------------------------------*/
-/* Main process, setups  */
-
-static struct etimer et;
-
-__attribute__((__far__))
-PROCESS_THREAD(accel_process, ev, data) {
-  PROCESS_BEGIN();
-  {
-    int16_t x, y, z;
-
-    /* Register the event used for lighting up an LED when interrupt strikes. */
-    sendMessage_event = process_alloc_event();
-
-    /* Start and setup the accelerometer with default values, eg no interrupts enabled. */
-    accm_init();
-
-    /* Register the callback functions for each interrupt */
-    ACCM_REGISTER_INT1_CB(accm_ff_cb);
-    ACCM_REGISTER_INT2_CB(accm_tap_cb);
-
-    /* Set what strikes the corresponding interrupts. Several interrupts per pin is
-      possible. For the eight possible interrupts, see adxl345.h and adxl345 datasheet. */
-    accm_set_irq(ADXL345_INT_FREEFALL, ADXL345_INT_TAP + ADXL345_INT_DOUBLETAP);
-
-    while (1) {
-	    x = accm_read_axis(X_AXIS);
-	    y = accm_read_axis(Y_AXIS);
-	    z = accm_read_axis(Z_AXIS);
-	    //PRINTF("x: %d y: %d z: %d\n", x, y, z);
-
-      etimer_set(&et, ACCM_READ_INTERVAL);
-      PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-    }
-  }
-  PROCESS_END();
-}
-
 /*---------------------------------------------------------------------------*/
