@@ -9,6 +9,10 @@
 #define ADPCM_CODEC_H_
 
 void ADPCM_init(void);
+void ADPCM_setPrevStepSize(int receivedPrevStepSize);
+void ADPCM_setPrevSample(signed int receivedPrevSample);
+int ADPCM_getPrevStepSize(void);
+signed int ADPCM_getPrevSample(void);
 char ADPCM_Encoder(int16_t Input);
 signed int ADPCM_Decoder(char code);
 

@@ -1,4 +1,4 @@
-all: udp-client udp-server udp-audioTransmit udp-audioReceive transmit-audio-adpcm receive-audio-adpcm intercom_adpcm intercom_g711
+all: udp-client udp-server udp-audioTransmit udp-audioReceive transmit-audio-adpcm receive-audio-adpcm intercom_adpcm intercom_g711 intercom_adpcm_ref intercom_adpcm_ref_twoway
 APPS=servreg-hack
 CONTIKI=../../..
 

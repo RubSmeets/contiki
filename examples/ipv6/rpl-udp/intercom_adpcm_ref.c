@@ -40,10 +40,11 @@
 #define REPEAT_SINE				40  /* 40 * (125µs * 200 samples) = 1 second tone */
 #define SINE_SAMPLE_COUNT		400
 #define MAX_PAYLOAD_LEN			80
-#define MAX_REC_PAYLOAD_LEN		80
+#define MAX_REC_PAYLOAD_LEN		84
 #define AUDIO_HDR_SIZE			2
 #define PRESSURE_IN				7	/* Port 2 pin 7 */
 #define	BUTTON_EXT				6	/* Port 2 pin 6 */
+#define AUDIO_HDR				4
 
 /* 440 Hz sine wave 16-bit signed little endian Byte order */
 static const uint8_t sine_440[] = {0x00, 0x00, 0xA9, 0x1E, 0xB1, 0x39, 0xE8, 0x4D, 0xE8, 0x58, 0x65, 0x59, 0x51, 0x4F, 0xDB, 0x3B, 0x52, 0x21, 0xD8, 0x02,
@@ -506,6 +507,13 @@ ISR(ADC12, adc_service_routine)
 ISR(TIMERB1, timerb1_service_routine)
 {
 	if(!play_tone) {
+		if(read_ptr % MAX_REC_PAYLOAD_LEN == 0) {
+			ADPCM_setPrevSample((signed int)((audio_playback[read_ptr]<<8) + (audio_playback[read_ptr+1] & 0xFF)));
+			read_ptr += 2;
+			ADPCM_setPrevStepSize((int)((audio_playback[read_ptr]<<8) + (audio_playback[read_ptr+1] & 0xFF)));
+			read_ptr += 2;
+		}
+
 		switch(receive_mode) {
 			case 0x01: /* playback bit (7-4) */
 				dac_setValue(decodedValue, Z1_DAC_0, 0);

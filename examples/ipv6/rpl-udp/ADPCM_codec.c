@@ -35,6 +35,44 @@ ADPCM_init(void)
 }
 
 /*-----------------------------------------------------------------------------*/
+/*
+ * Get the previous sample
+ */
+signed int
+ADPCM_getPrevSample(void)
+{
+	return PrevSample;
+}
+
+/*-----------------------------------------------------------------------------*/
+/*
+ * Get The previous step size
+ */
+int
+ADPCM_getPrevStepSize(void)
+{
+	return PrevStepSize;
+}
+/*-----------------------------------------------------------------------------*/
+/*
+ * set the previous sample
+ */
+void
+ADPCM_setPrevSample(signed int receivedPrevSample)
+{
+	PrevSample = receivedPrevSample;
+}
+
+/*-----------------------------------------------------------------------------*/
+/*
+ * set The previous step size
+ */
+void
+ADPCM_setPrevStepSize(int receivedPrevStepSize)
+{
+	PrevStepSize = receivedPrevStepSize;
+}
+/*-----------------------------------------------------------------------------*/
 /* ADPCM Encoder function
 *  This function converts a 16-bit sample into a 4-bit ADPCM code.
 */
